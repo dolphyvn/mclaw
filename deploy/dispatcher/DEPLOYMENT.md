@@ -9,6 +9,7 @@ The MClaw Dispatcher service has been successfully deployed and configured.
 | Component | Host | Port | Notes |
 |-----------|------|------|-------|
 | Dispatcher Service | ns3366383.ip-37-187-77.eu | 42619 | Running as systemd service |
+| Multi-Tenant Gateway | ns3366383.ip-37-187-77.eu | 42620 | Centralized LLM API management |
 | Nginx Reverse Proxy | ns3366383.ip-37-187-77.eu | 443 (HTTPS) | SSL: ml.ovh139.aliases.me |
 | Telegram Webhook | - | - | https://ml.ovh139.aliases.me/webhook |
 
@@ -24,6 +25,9 @@ The MClaw Dispatcher service has been successfully deployed and configured.
 | Register Machine | `https://ml.ovh139.aliases.me/register` | Dynamic machine registration (POST) |
 | Unregister Machine | `https://ml.ovh139.aliases.me/unregister` | Unregister a machine (POST) |
 | Heartbeat | `https://ml.ovh139.aliases.me/heartbeat` | Send machine heartbeat (POST) |
+| MT Health | `https://ml.ovh139.aliases.me/mt-health` | Multi-tenant gateway health |
+| MT Clients | `https://ml.ovh139.aliases.me/api/v1/clients` | List multi-tenant clients |
+| MT Chat API | `https://ml.ovh139.aliases.me/api/v1/chat` | Multi-tenant chat completions |
 
 ### Configured Machines
 
@@ -142,6 +146,68 @@ description = "Auto-registered client"
 default = false
 registration_interval_secs = 30
 ```
+
+### Multi-Tenant Gateway
+
+The Multi-Tenant Gateway provides centralized LLM API management for multiple clients. It allows different applications/services to share LLM providers with isolated configurations.
+
+#### Features
+
+- **Client Isolation**: Each client has independent provider/model configuration
+- **Multiple Providers**: OpenRouter, OpenAI, GLM, OpenAI Codex supported
+- **OAuth Support**: Supports API key and OAuth authentication profiles
+- **Rate Limiting**: Per-client rate limiting (optional)
+
+#### Usage
+
+**List all configured clients:**
+```bash
+curl https://ml.ovh139.aliases.me/api/v1/clients | jq .
+```
+
+**Send chat completion request:**
+```bash
+curl -X POST https://ml.ovh139.aliases.me/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_id": "client1",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+**Health check:**
+```bash
+curl https://ml.ovh139.aliases.me/mt-health | jq .
+```
+
+#### Configuration
+
+Multi-tenant clients are configured in `/etc/mclaw/multi_tenant.toml`:
+
+```toml
+[[groups]]
+client_id = "client1"
+client_secret = ""
+provider = "openrouter"
+model = "anthropic/claude-sonnet-4.6"
+api_key = "sk-or-..."
+
+[[groups]]
+client_id = "client2"
+client_secret = ""
+provider = "openrouter"
+model = "anthropic/claude-sonnet-4.6"
+api_key = "sk-or-..."
+```
+
+#### Systemd Service
+
+The multi-tenant gateway runs as:
+```bash
+/usr/local/bin/mclaw gateway-server --config-dir /etc/mclaw --port 42620 --host 0.0.0.0
+```
+
+Service file: `/etc/systemd/system/mclaw-multi-tenant-gateway.service`
 
 ### Next Steps
 
