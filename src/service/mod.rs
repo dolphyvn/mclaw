@@ -1184,7 +1184,7 @@ mod tests {
         assert!(script.contains("command=\"/usr/local/bin/zeroclaw\""));
         assert!(script.contains("command_args=\"--config-dir /etc/zeroclaw daemon\""));
         assert!(!script.contains("env ZEROCLAW_CONFIG_DIR"));
-        assert!(!script.contains("env MCLAW_WORKSPACE"));
+        assert!(!script.contains("env ZEROCLAW_WORKSPACE"));
         assert!(script.contains("command_background=\"yes\""));
         assert!(script.contains("command_user=\"zeroclaw:zeroclaw\""));
         assert!(script.contains("pidfile=\"/run/${RC_SVCNAME}.pid\""));
