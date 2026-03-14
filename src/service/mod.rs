@@ -5,8 +5,60 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
-const SERVICE_LABEL: &str = "com.mclaw.daemon";
+const DAEMON_LABEL: &str = "com.mclaw.daemon";
+const GATEWAY_LABEL: &str = "com.mclaw.gateway";
 const WINDOWS_TASK_NAME: &str = "MClaw Daemon";
+
+/// Service type to manage
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceType {
+    Daemon,
+    Gateway,
+}
+
+impl ServiceType {
+    pub fn display_name(&self) -> &str {
+        match self {
+            ServiceType::Daemon => "daemon",
+            ServiceType::Gateway => "gateway",
+        }
+    }
+
+    pub fn launchd_label(&self) -> &str {
+        match self {
+            ServiceType::Daemon => DAEMON_LABEL,
+            ServiceType::Gateway => GATEWAY_LABEL,
+        }
+    }
+
+    pub fn systemd_service_name(&self) -> &str {
+        match self {
+            ServiceType::Daemon => "mclaw-daemon.service",
+            ServiceType::Gateway => "mclaw-gateway.service",
+        }
+    }
+
+    pub fn openrc_service_name(&self) -> &str {
+        match self {
+            ServiceType::Daemon => "mclaw",
+            ServiceType::Gateway => "mclaw-gateway",
+        }
+    }
+
+    pub fn command_args(&self) -> &[&str] {
+        match self {
+            ServiceType::Daemon => &["daemon"],
+            ServiceType::Gateway => &["gateway-server"],
+        }
+    }
+
+    pub fn command_pretty(&self) -> &str {
+        match self {
+            ServiceType::Daemon => "daemon",
+            ServiceType::Gateway => "gateway-server",
+        }
+    }
+}
 
 /// Supported init systems for service management
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -93,40 +145,41 @@ pub fn handle_command(
     command: &crate::ServiceCommands,
     config: &Config,
     init_system: InitSystem,
+    service_type: ServiceType,
 ) -> Result<()> {
     match command {
-        crate::ServiceCommands::Install => install(config, init_system),
-        crate::ServiceCommands::Start => start(config, init_system),
-        crate::ServiceCommands::Stop => stop(config, init_system),
-        crate::ServiceCommands::Restart => restart(config, init_system),
-        crate::ServiceCommands::Status => status(config, init_system),
-        crate::ServiceCommands::Uninstall => uninstall(config, init_system),
+        crate::ServiceCommands::Install => install(config, init_system, service_type),
+        crate::ServiceCommands::Start => start(config, init_system, service_type),
+        crate::ServiceCommands::Stop => stop(config, init_system, service_type),
+        crate::ServiceCommands::Restart => restart(config, init_system, service_type),
+        crate::ServiceCommands::Status => status(config, init_system, service_type),
+        crate::ServiceCommands::Uninstall => uninstall(config, init_system, service_type),
     }
 }
 
-fn install(config: &Config, init_system: InitSystem) -> Result<()> {
+fn install(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     if cfg!(target_os = "macos") {
-        install_macos(config)
+        install_macos(config, service_type)
     } else if cfg!(target_os = "linux") {
         let resolved = init_system.resolve()?;
-        install_linux(config, resolved)
+        install_linux(config, resolved, service_type)
     } else if cfg!(target_os = "windows") {
-        install_windows(config)
+        install_windows(config, service_type)
     } else {
         anyhow::bail!("Service management is supported on macOS and Linux only");
     }
 }
 
-fn start(config: &Config, init_system: InitSystem) -> Result<()> {
+fn start(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     if cfg!(target_os = "macos") {
-        let plist = macos_service_file()?;
+        let plist = macos_service_file(service_type)?;
         run_checked(Command::new("launchctl").arg("load").arg("-w").arg(&plist))?;
-        run_checked(Command::new("launchctl").arg("start").arg(SERVICE_LABEL))?;
+        run_checked(Command::new("launchctl").arg("start").arg(service_type.launchd_label()))?;
         println!("✅ Service started");
         Ok(())
     } else if cfg!(target_os = "linux") {
         let resolved = init_system.resolve()?;
-        start_linux(resolved)
+        start_linux(resolved, service_type)
     } else if cfg!(target_os = "windows") {
         let _ = config;
         run_checked(Command::new("schtasks").args(["/Run", "/TN", windows_task_name()]))?;
@@ -138,14 +191,14 @@ fn start(config: &Config, init_system: InitSystem) -> Result<()> {
     }
 }
 
-fn start_linux(init_system: InitSystem) -> Result<()> {
+fn start_linux(init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
-            run_checked(Command::new("systemctl").args(["--user", "start", "mclaw-daemon.service"]))?;
+            run_checked(Command::new("systemctl").args(["--user", "start", service_type.systemd_service_name()]))?;
         }
         InitSystem::Openrc => {
-            run_checked(Command::new("rc-service").args(["mclaw", "start"]))?;
+            run_checked(Command::new("rc-service").args([service_type.openrc_service_name(), "start"]))?;
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -153,10 +206,10 @@ fn start_linux(init_system: InitSystem) -> Result<()> {
     Ok(())
 }
 
-fn stop(config: &Config, init_system: InitSystem) -> Result<()> {
+fn stop(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     if cfg!(target_os = "macos") {
-        let plist = macos_service_file()?;
-        let _ = run_checked(Command::new("launchctl").arg("stop").arg(SERVICE_LABEL));
+        let plist = macos_service_file(service_type)?;
+        let _ = run_checked(Command::new("launchctl").arg("stop").arg(service_type.launchd_label()));
         let _ = run_checked(
             Command::new("launchctl")
                 .arg("unload")
@@ -167,7 +220,7 @@ fn stop(config: &Config, init_system: InitSystem) -> Result<()> {
         Ok(())
     } else if cfg!(target_os = "linux") {
         let resolved = init_system.resolve()?;
-        stop_linux(resolved)
+        stop_linux(resolved, service_type)
     } else if cfg!(target_os = "windows") {
         let _ = config;
         let task_name = windows_task_name();
@@ -180,14 +233,14 @@ fn stop(config: &Config, init_system: InitSystem) -> Result<()> {
     }
 }
 
-fn stop_linux(init_system: InitSystem) -> Result<()> {
+fn stop_linux(init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             let _ =
-                run_checked(Command::new("systemctl").args(["--user", "stop", "mclaw-daemon.service"]));
+                run_checked(Command::new("systemctl").args(["--user", "stop", service_type.systemd_service_name()]));
         }
         InitSystem::Openrc => {
-            let _ = run_checked(Command::new("rc-service").args(["mclaw", "stop"]));
+            let _ = run_checked(Command::new("rc-service").args([service_type.openrc_service_name(), "stop"]));
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -195,22 +248,22 @@ fn stop_linux(init_system: InitSystem) -> Result<()> {
     Ok(())
 }
 
-fn restart(config: &Config, init_system: InitSystem) -> Result<()> {
+fn restart(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     if cfg!(target_os = "macos") {
-        stop(config, init_system)?;
-        start(config, init_system)?;
+        stop(config, init_system, service_type)?;
+        start(config, init_system, service_type)?;
         println!("✅ Service restarted");
         return Ok(());
     }
 
     if cfg!(target_os = "linux") {
         let resolved = init_system.resolve()?;
-        return restart_linux(resolved);
+        return restart_linux(resolved, service_type);
     }
 
     if cfg!(target_os = "windows") {
-        stop(config, init_system)?;
-        start(config, init_system)?;
+        stop(config, init_system, service_type)?;
+        start(config, init_system, service_type)?;
         println!("✅ Service restarted");
         return Ok(());
     }
@@ -218,14 +271,14 @@ fn restart(config: &Config, init_system: InitSystem) -> Result<()> {
     anyhow::bail!("Service management is supported on macOS and Linux only")
 }
 
-fn restart_linux(init_system: InitSystem) -> Result<()> {
+fn restart_linux(init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
-            run_checked(Command::new("systemctl").args(["--user", "restart", "mclaw-daemon.service"]))?;
+            run_checked(Command::new("systemctl").args(["--user", "restart", service_type.systemd_service_name()]))?;
         }
         InitSystem::Openrc => {
-            run_checked(Command::new("rc-service").args(["mclaw", "restart"]))?;
+            run_checked(Command::new("rc-service").args([service_type.openrc_service_name(), "restart"]))?;
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -233,10 +286,10 @@ fn restart_linux(init_system: InitSystem) -> Result<()> {
     Ok(())
 }
 
-fn status(config: &Config, init_system: InitSystem) -> Result<()> {
+fn status(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     if cfg!(target_os = "macos") {
         let out = run_capture(Command::new("launchctl").arg("list"))?;
-        let running = out.lines().any(|line| line.contains(SERVICE_LABEL));
+        let running = out.lines().any(|line| line.contains(service_type.launchd_label()));
         println!(
             "Service: {}",
             if running {
@@ -245,13 +298,13 @@ fn status(config: &Config, init_system: InitSystem) -> Result<()> {
                 "❌ not loaded"
             }
         );
-        println!("Unit: {}", macos_service_file()?.display());
+        println!("Unit: {}", macos_service_file(service_type)?.display());
         return Ok(());
     }
 
     if cfg!(target_os = "linux") {
         let resolved = init_system.resolve()?;
-        return status_linux(config, resolved);
+        return status_linux(config, resolved, service_type);
     }
 
     if cfg!(target_os = "windows") {
@@ -282,34 +335,34 @@ fn status(config: &Config, init_system: InitSystem) -> Result<()> {
     anyhow::bail!("Service management is supported on macOS and Linux only")
 }
 
-fn status_linux(config: &Config, init_system: InitSystem) -> Result<()> {
+fn status_linux(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             let out = run_capture(Command::new("systemctl").args([
                 "--user",
                 "is-active",
-                "mclaw-daemon.service",
+                service_type.systemd_service_name(),
             ]))
             .unwrap_or_else(|_| "unknown".into());
             println!("Service state: {}", out.trim());
-            println!("Unit: {}", linux_service_file(config)?.display());
+            println!("Unit: {}", linux_service_file(config, service_type)?.display());
         }
         InitSystem::Openrc => {
-            let out = run_capture(Command::new("rc-service").args(["mclaw", "status"]))
+            let out = run_capture(Command::new("rc-service").args([service_type.openrc_service_name(), "status"]))
                 .unwrap_or_else(|_| "unknown".into());
             println!("Service state: {}", out.trim());
-            println!("Unit: /etc/init.d/mclaw");
+            println!("Unit: /etc/init.d/{}", service_type.openrc_service_name());
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
     Ok(())
 }
 
-fn uninstall(config: &Config, init_system: InitSystem) -> Result<()> {
-    stop(config, init_system)?;
+fn uninstall(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
+    stop(config, init_system, service_type)?;
 
     if cfg!(target_os = "macos") {
-        let file = macos_service_file()?;
+        let file = macos_service_file(service_type)?;
         if file.exists() {
             fs::remove_file(&file)
                 .with_context(|| format!("Failed to remove {}", file.display()))?;
@@ -320,7 +373,7 @@ fn uninstall(config: &Config, init_system: InitSystem) -> Result<()> {
 
     if cfg!(target_os = "linux") {
         let resolved = init_system.resolve()?;
-        return uninstall_linux(config, resolved);
+        return uninstall_linux(config, resolved, service_type);
     }
 
     if cfg!(target_os = "windows") {
@@ -343,10 +396,10 @@ fn uninstall(config: &Config, init_system: InitSystem) -> Result<()> {
     anyhow::bail!("Service management is supported on macOS and Linux only")
 }
 
-fn uninstall_linux(config: &Config, init_system: InitSystem) -> Result<()> {
+fn uninstall_linux(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
-            let file = linux_service_file(config)?;
+            let file = linux_service_file(config, service_type)?;
             if file.exists() {
                 fs::remove_file(&file)
                     .with_context(|| format!("Failed to remove {}", file.display()))?;
@@ -355,27 +408,29 @@ fn uninstall_linux(config: &Config, init_system: InitSystem) -> Result<()> {
             println!("✅ Service uninstalled ({})", file.display());
         }
         InitSystem::Openrc => {
-            let init_script = Path::new("/etc/init.d/mclaw");
+            let service_name = service_type.openrc_service_name();
+            let init_script = Path::new("/etc/init.d").join(service_name);
             if init_script.exists() {
                 if let Err(err) =
-                    run_checked(Command::new("rc-update").args(["del", "mclaw", "default"]))
+                    run_checked(Command::new("rc-update").args(["del", service_name, "default"]))
                 {
                     eprintln!(
-                        "⚠️  Warning: Could not remove mclaw from OpenRC default runlevel: {err}"
+                        "⚠️  Warning: Could not remove {} from OpenRC default runlevel: {err}",
+                        service_name
                     );
                 }
-                fs::remove_file(init_script)
+                fs::remove_file(&init_script)
                     .with_context(|| format!("Failed to remove {}", init_script.display()))?;
             }
-            println!("✅ Service uninstalled (/etc/init.d/mclaw)");
+            println!("✅ Service uninstalled (/etc/init.d/{})", service_name);
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
     Ok(())
 }
 
-fn install_macos(config: &Config) -> Result<()> {
-    let file = macos_service_file()?;
+fn install_macos(config: &Config, service_type: ServiceType) -> Result<()> {
+    let file = macos_service_file(service_type)?;
     if let Some(parent) = file.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -388,20 +443,30 @@ fn install_macos(config: &Config) -> Result<()> {
         .join("logs");
     fs::create_dir_all(&logs_dir)?;
 
-    let stdout = logs_dir.join("daemon.stdout.log");
-    let stderr = logs_dir.join("daemon.stderr.log");
+    let stdout = logs_dir.join(format!("{}.stdout.log", service_type.display_name()));
+    let stderr = logs_dir.join(format!("{}.stderr.log", service_type.display_name()));
+
+    let args = service_type.command_args();
+    let args_xml = if args.is_empty() {
+        String::new()
+    } else {
+        args.iter()
+            .map(|arg| format!("    <string>{}</string>\n", xml_escape(arg)))
+            .collect::<Vec<_>>()
+            .concat()
+    };
 
     let plist = format!(
-        r#"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
 <dict>
   <key>Label</key>
   <string>{label}</string>
   <key>ProgramArguments</key>
   <array>
     <string>{exe}</string>
-    <string>daemon</string>
+{args}
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -414,43 +479,65 @@ fn install_macos(config: &Config) -> Result<()> {
 </dict>
 </plist>
 "#,
-        label = SERVICE_LABEL,
+        label = service_type.launchd_label(),
         exe = xml_escape(&exe.display().to_string()),
+        args = args_xml,
         stdout = xml_escape(&stdout.display().to_string()),
         stderr = xml_escape(&stderr.display().to_string())
     );
 
     fs::write(&file, plist)?;
     println!("✅ Installed launchd service: {}", file.display());
-    println!("   Start with: mclaw service start");
+    if service_type == ServiceType::Gateway {
+        println!("   Start with: mclaw service start --gateway");
+    } else {
+        println!("   Start with: mclaw service start");
+    }
     Ok(())
 }
 
-fn install_linux(config: &Config, init_system: InitSystem) -> Result<()> {
+fn install_linux(config: &Config, init_system: InitSystem, service_type: ServiceType) -> Result<()> {
     match init_system {
-        InitSystem::Systemd => install_linux_systemd(config),
-        InitSystem::Openrc => install_linux_openrc(config),
+        InitSystem::Systemd => install_linux_systemd(config, service_type),
+        InitSystem::Openrc => install_linux_openrc(config, service_type),
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
 }
 
-fn install_linux_systemd(config: &Config) -> Result<()> {
-    let file = linux_service_file(config)?;
+fn install_linux_systemd(config: &Config, service_type: ServiceType) -> Result<()> {
+    let file = linux_service_file(config, service_type)?;
     if let Some(parent) = file.parent() {
         fs::create_dir_all(parent)?;
     }
 
     let exe = std::env::current_exe().context("Failed to resolve current executable")?;
+    let command = if service_type == ServiceType::Gateway {
+        "gateway-server"
+    } else {
+        "daemon"
+    };
+    let description = if service_type == ServiceType::Gateway {
+        "MClaw LLM Gateway Server"
+    } else {
+        "MClaw daemon"
+    };
+
     let unit = format!(
-        "[Unit]\nDescription=MClaw daemon\nAfter=network.target\n\n[Service]\nType=simple\nExecStart={} daemon\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n",
-        exe.display()
+        "[Unit]\nDescription={}\nAfter=network.target\n\n[Service]\nType=simple\nExecStart={} {}\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n",
+        description,
+        exe.display(),
+        command
     );
 
     fs::write(&file, unit)?;
     let _ = run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]));
-    let _ = run_checked(Command::new("systemctl").args(["--user", "enable", "mclaw-daemon.service"]));
+    let _ = run_checked(Command::new("systemctl").args(["--user", "enable", service_type.systemd_service_name()]));
     println!("✅ Installed systemd user service: {}", file.display());
-    println!("   Start with: mclaw service start");
+    if service_type == ServiceType::Gateway {
+        println!("   Start with: mclaw service start --gateway");
+    } else {
+        println!("   Start with: mclaw service start");
+    }
     Ok(())
 }
 
@@ -819,15 +906,20 @@ fn warn_if_binary_in_home(exe_path: &Path) {
 }
 
 /// Generate OpenRC init script content (pure function for testability)
-fn generate_openrc_script(exe_path: &Path, config_dir: &Path) -> String {
+fn generate_openrc_script(exe_path: &Path, config_dir: &Path, service_type: ServiceType) -> String {
+    let (name, description, command) = match service_type {
+        ServiceType::Daemon => ("mclaw", "MClaw daemon", "daemon"),
+        ServiceType::Gateway => ("mclaw-gateway", "MClaw LLM Gateway Server", "gateway-server"),
+    };
+
     format!(
         r#"#!/sbin/openrc-run
 
-name="mclaw"
-description="MClaw daemon"
+name="{name}"
+description="{description}"
 
-command="{}"
-command_args="--config-dir {} daemon"
+command="{exe_path}"
+command_args="--config-dir {config_dir} {command}"
 command_background="yes"
 command_user="mclaw:mclaw"
 pidfile="/run/${{RC_SVCNAME}}.pid"
@@ -840,8 +932,11 @@ depend() {{
     after firewall
 }}
 "#,
-        exe_path.display(),
-        config_dir.display()
+        name = name,
+        description = description,
+        exe_path = exe_path.display(),
+        config_dir = config_dir.display(),
+        command = command
     )
 }
 
@@ -855,11 +950,12 @@ fn resolve_openrc_executable() -> Result<PathBuf> {
     Ok(exe)
 }
 
-fn install_linux_openrc(config: &Config) -> Result<()> {
+fn install_linux_openrc(config: &Config, service_type: ServiceType) -> Result<()> {
     if !is_root() {
         bail!(
             "OpenRC service installation requires root privileges.\n\
-             Please run with sudo: sudo mclaw service install"
+             Please run with sudo: sudo mclaw service install{}",
+            if service_type == ServiceType::Gateway { " --gateway" } else { "" }
         );
     }
 
@@ -955,27 +1051,32 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
         );
     }
 
-    let init_script = generate_openrc_script(&exe, config_dir);
-    let init_path = Path::new("/etc/init.d/mclaw");
-    fs::write(init_path, init_script)
+    let init_script = generate_openrc_script(&exe, config_dir, service_type);
+    let service_name = service_type.openrc_service_name();
+    let init_path = Path::new("/etc/init.d").join(service_name);
+    fs::write(&init_path, init_script)
         .with_context(|| format!("Failed to write {}", init_path.display()))?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(init_path, fs::Permissions::from_mode(0o755))
+        fs::set_permissions(&init_path, fs::Permissions::from_mode(0o755))
             .with_context(|| format!("Failed to set permissions on {}", init_path.display()))?;
     }
 
-    run_checked(Command::new("rc-update").args(["add", "mclaw", "default"]))?;
-    println!("✅ Installed OpenRC service: /etc/init.d/mclaw");
+    run_checked(Command::new("rc-update").args(["add", service_name, "default"]))?;
+    println!("✅ Installed OpenRC service: {}", init_path.display());
     println!("   Config path: /etc/mclaw/config.toml");
-    println!("   Start with: sudo mclaw service start");
+    if service_type == ServiceType::Gateway {
+        println!("   Start with: sudo mclaw service start --gateway");
+    } else {
+        println!("   Start with: sudo mclaw service start");
+    }
     let _ = config;
     Ok(())
 }
 
-fn install_windows(config: &Config) -> Result<()> {
+fn install_windows(config: &Config, service_type: ServiceType) -> Result<()> {
     let exe = std::env::current_exe().context("Failed to resolve current executable")?;
     let logs_dir = config
         .config_path
@@ -984,14 +1085,17 @@ fn install_windows(config: &Config) -> Result<()> {
         .join("logs");
     fs::create_dir_all(&logs_dir)?;
 
-    // Create a wrapper script that redirects output to log files
-    let wrapper = logs_dir.join("mclaw-daemon.cmd");
-    let stdout_log = logs_dir.join("daemon.stdout.log");
-    let stderr_log = logs_dir.join("daemon.stderr.log");
+    let command = service_type.command_pretty();
+    let wrapper_name = format!("mclaw-{}.cmd", service_type.display_name());
+    let stdout_log = logs_dir.join(format!("{}.stdout.log", service_type.display_name()));
+    let stderr_log = logs_dir.join(format!("{}.stderr.log", service_type.display_name()));
 
+    // Create a wrapper script that redirects output to log files
+    let wrapper = logs_dir.join(&wrapper_name);
     let wrapper_content = format!(
-        "@echo off\r\n\"{}\" daemon >>\"{}\" 2>>\"{}\"",
+        "@echo off\r\n\"{}\" {} >>\"{}\" 2>>\"{}\"",
         exe.display(),
+        command,
         stdout_log.display(),
         stderr_log.display()
     );
@@ -1020,21 +1124,25 @@ fn install_windows(config: &Config) -> Result<()> {
     println!("✅ Installed Windows scheduled task: {}", task_name);
     println!("   Wrapper: {}", wrapper.display());
     println!("   Logs: {}", logs_dir.display());
-    println!("   Start with: mclaw service start");
+    if service_type == ServiceType::Gateway {
+        println!("   Start with: mclaw service start --gateway");
+    } else {
+        println!("   Start with: mclaw service start");
+    }
     Ok(())
 }
 
-fn macos_service_file() -> Result<PathBuf> {
+fn macos_service_file(service_type: ServiceType) -> Result<PathBuf> {
     let home = directories::UserDirs::new()
         .map(|u| u.home_dir().to_path_buf())
         .context("Could not find home directory")?;
     Ok(home
         .join("Library")
         .join("LaunchAgents")
-        .join(format!("{SERVICE_LABEL}.plist")))
+        .join(format!("{}.plist", service_type.launchd_label())))
 }
 
-fn linux_service_file(config: &Config) -> Result<PathBuf> {
+fn linux_service_file(config: &Config, service_type: ServiceType) -> Result<PathBuf> {
     let home = directories::UserDirs::new()
         .map(|u| u.home_dir().to_path_buf())
         .context("Could not find home directory")?;
@@ -1043,7 +1151,7 @@ fn linux_service_file(config: &Config) -> Result<PathBuf> {
         .join(".config")
         .join("systemd")
         .join("user")
-        .join("mclaw-daemon.service"))
+        .join(service_type.systemd_service_name()))
 }
 
 fn run_checked(command: &mut Command) -> Result<()> {
@@ -1176,7 +1284,7 @@ mod tests {
         use std::path::PathBuf;
 
         let exe_path = PathBuf::from("/opt/works/personal/github/mclaw/target/debug/mclaw");
-        let script = generate_openrc_script(&exe_path, Path::new("/etc/mclaw"));
+        let script = generate_openrc_script(&exe_path, Path::new("/etc/mclaw"), ServiceType::Daemon);
 
         assert!(script.starts_with("#!/sbin/openrc-run"));
         assert!(script.contains("name=\"mclaw\""));

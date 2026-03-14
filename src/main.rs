@@ -242,6 +242,10 @@ Examples:
         #[arg(long, default_value = "auto", value_parser = ["auto", "systemd", "openrc"])]
         service_init: String,
 
+        /// Install the gateway-server service instead of daemon
+        #[arg(long)]
+        gateway: bool,
+
         #[command(subcommand)]
         service_command: ServiceCommands,
     },
@@ -1084,9 +1088,15 @@ async fn main() -> Result<()> {
         Commands::Service {
             service_command,
             service_init,
+            gateway,
         } => {
             let init_system = service_init.parse()?;
-            service::handle_command(&service_command, &config, init_system)
+            let service_type = if gateway {
+                service::ServiceType::Gateway
+            } else {
+                service::ServiceType::Daemon
+            };
+            service::handle_command(&service_command, &config, init_system, service_type)
         }
 
         Commands::Doctor { doctor_command } => match doctor_command {
