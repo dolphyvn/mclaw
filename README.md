@@ -351,6 +351,120 @@ curl -X POST http://ns3366383.ip-37-187-77.eu:42619/register \
   }'
 ```
 
+### Step 5: Configure Client to Use Multi-Tenant Gateway
+
+**IMPORTANT**: By default, clients use their own LLM provider configuration. To use the centralized Multi-Tenant Gateway instead, add this to the client's `/root/.mclaw/config.toml`:
+
+#### For client1 (local machine):
+
+```toml
+[dispatcher]
+enabled = true
+machine_name = "client1"
+endpoint = "http://127.0.0.1:42619"
+auth_token = "YOUR_BOT_TOKEN"
+description = "Local gateway machine"
+default = true
+
+[gateway]
+enabled = true
+host = "127.0.0.1"
+port = 42618
+allow_public_bind = false
+
+# === Configure to use Multi-Tenant Gateway ===
+# This tells the agent to use the centralized gateway instead of local provider
+[providers.mclaw]
+type = "mclaw"
+gateway_url = "http://127.0.0.1:42620"  # Multi-Tenant Gateway URL
+client_id = "client1"                   # Your assigned group/client ID
+client_secret = "mc_client1_..."         # Your secret from generate-secret
+
+# Use mclaw as the default model
+[default_model]
+name = "mclaw"
+type = "mclaw"
+```
+
+#### For client2 (remote machine):
+
+```toml
+[dispatcher]
+enabled = true
+machine_name = "client2"
+endpoint = "http://ns3366383.ip-37-187-77.eu:42619"
+auth_token = "YOUR_BOT_TOKEN"
+description = "Remote production server"
+default = false
+
+[gateway]
+enabled = true
+host = "0.0.0.0"
+port = 42618
+allow_public_bind = true
+
+# === Configure to use Multi-Tenant Gateway ===
+# Point to the remote Multi-Tenant Gateway
+[providers.mclaw]
+type = "mclaw"
+gateway_url = "http://ns3366383.ip-37-187-77.eu:42620"
+client_id = "client2"
+client_secret = "mc_client2_..."
+
+[default_model]
+name = "mclaw"
+type = "mclaw"
+```
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Client Machine (client2)                  │
+│                                                             │
+│  MClaw Agent Daemon                                         │
+│     │                                                       │
+│     │  Needs LLM for reasoning                              │
+│     ▼                                                       │
+│  [providers.mclaw]                                          │
+│     │                                                       │
+│     │  HTTP POST with client_id + client_secret            │
+│     ▼                                                       │
+│  Multi-Tenant Gateway (ns3366383:42620)                     │
+│     │                                                       │
+│     │  Validates credentials, routes to provider            │
+│     ▼                                                       │
+│  OpenRouter / OpenAI / GLM (as configured for client2)      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Client-Provider Mapping
+
+Each client can be assigned to different provider groups:
+
+| Client | client_id | Provider | Model |
+|--------|-----------|----------|-------|
+| client1 | `client1` | OpenRouter | Claude Sonnet 4.6 |
+| client2 | `client2` | OpenRouter | Claude Sonnet 4.6 |
+| group-a | `group-a` | OpenRouter | Nemotron (free) |
+| group-b | `group-b` | OpenAI | GPT-4o |
+| chatgpt-plus | `chatgpt-plus` | OpenAI Codex (OAuth) | GPT-4o |
+
+### Alternative: Direct Provider Configuration
+
+If you want a client to use a provider directly (bypassing the Multi-Tenant Gateway):
+
+```toml
+# Direct OpenRouter configuration (no gateway needed)
+[providers.openrouter]
+type = "openrouter"
+api_key = "sk-or-v1-YOUR_KEY"
+
+[default_model]
+name = "anthropic/claude-sonnet-4.6"
+type = "openrouter"
+```
+
 ---
 
 ## Part 5: Systemd Services
