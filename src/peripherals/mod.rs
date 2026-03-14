@@ -50,8 +50,8 @@ pub async fn handle_command(cmd: crate::PeripheralCommands, config: &Config) -> 
             if boards.is_empty() {
                 println!("No peripherals configured.");
                 println!();
-                println!("Add one with: zeroclaw peripheral add <board> <path>");
-                println!("  Example: zeroclaw peripheral add nucleo-f401re /dev/ttyACM0");
+                println!("Add one with: mclaw peripheral add <board> <path>");
+                println!("  Example: mclaw peripheral add nucleo-f401re /dev/ttyACM0");
                 println!();
                 println!("Or add to config.toml:");
                 println!("  [peripherals]");

@@ -17,7 +17,7 @@ pub fn setup_uno_q_bridge(host: Option<&str>) -> Result<()> {
             deploy_remote(h, &bridge_dir)?;
         } else {
             anyhow::bail!(
-                "Bridge app not found at {}. Run from zeroclaw repo root.",
+                "Bridge app not found at {}. Run from mclaw repo root.",
                 bridge_dir.display()
             );
         }

@@ -1010,7 +1010,7 @@ nickname = "bot"
             port: 6697,
             nickname: "zcbot".into(),
             username: None,
-            channels: vec!["#zeroclaw".into()],
+            channels: vec!["#mclaw".into()],
             allowed_users: vec!["*".into()],
             server_password: None,
             nickserv_password: None,

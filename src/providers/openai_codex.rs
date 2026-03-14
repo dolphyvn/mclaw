@@ -115,8 +115,8 @@ impl OpenAiCodexProvider {
 
 fn default_mclaw_dir() -> PathBuf {
     directories::UserDirs::new().map_or_else(
-        || PathBuf::from(".zeroclaw"),
-        |dirs| dirs.home_dir().join(".zeroclaw"),
+        || PathBuf::from(".mclaw"),
+        |dirs| dirs.home_dir().join(".mclaw"),
     )
 }
 

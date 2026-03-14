@@ -107,26 +107,26 @@ fn show_integration_info(config: &Config, name: &str) -> Result<()> {
             println!("  Setup:");
             println!("    1. Message @BotFather on Telegram");
             println!("    2. Create a bot and copy the token");
-            println!("    3. Run: zeroclaw onboard --channels-only");
-            println!("    4. Start: zeroclaw channel start");
+            println!("    3. Run: mclaw onboard --channels-only");
+            println!("    4. Start: mclaw channel start");
         }
         "Discord" => {
             println!("  Setup:");
             println!("    1. Go to https://discord.com/developers/applications");
             println!("    2. Create app → Bot → Copy token");
             println!("    3. Enable MESSAGE CONTENT intent");
-            println!("    4. Run: zeroclaw onboard --channels-only");
+            println!("    4. Run: mclaw onboard --channels-only");
         }
         "Slack" => {
             println!("  Setup:");
             println!("    1. Go to https://api.slack.com/apps");
             println!("    2. Create app → Bot Token Scopes → Install");
-            println!("    3. Run: zeroclaw onboard --channels-only");
+            println!("    3. Run: mclaw onboard --channels-only");
         }
         "OpenRouter" => {
             println!("  Setup:");
             println!("    1. Get API key at https://openrouter.ai/keys");
-            println!("    2. Run: zeroclaw onboard");
+            println!("    2. Run: mclaw onboard");
             println!("    Access 200+ models with one key.");
         }
         "Ollama" => {
@@ -153,12 +153,12 @@ fn show_integration_info(config: &Config, name: &str) -> Result<()> {
         "Cron" => {
             println!("  Built-in:");
             println!("    Schedule tasks in ~/.mclaw/workspace/cron/");
-            println!("    Run: zeroclaw cron list");
+            println!("    Run: mclaw cron list");
         }
         "Webhooks" => {
             println!("  Built-in:");
             println!("    HTTP endpoint for external triggers.");
-            println!("    Run: zeroclaw gateway");
+            println!("    Run: mclaw gateway");
         }
         _ => {
             if status == IntegrationStatus::ComingSoon {

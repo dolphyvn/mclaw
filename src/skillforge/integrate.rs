@@ -193,7 +193,7 @@ mod tests {
 
     #[tokio::test]
     async fn integrate_creates_files() {
-        let tmp = std::env::temp_dir().join("zeroclaw-test-integrate");
+        let tmp = std::env::temp_dir().join("mclaw-test-integrate");
         let _ = fs::remove_dir_all(&tmp);
 
         let integrator = Integrator::new(tmp.to_string_lossy().into_owned());

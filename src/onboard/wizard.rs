@@ -435,7 +435,7 @@ fn resolve_quick_setup_dirs_with_home(home: &Path) -> (PathBuf, PathBuf) {
         }
     }
 
-    let config_dir = home.join(".zeroclaw");
+    let config_dir = home.join(".mclaw");
     (config_dir.clone(), config_dir.join("workspace"))
 }
 
@@ -609,35 +609,35 @@ async fn run_quick_setup_with_home(
     println!("  {}", style("Next steps:").white().bold());
     if credential_override.is_none() {
         if provider_supports_keyless_local_usage(&provider_name) {
-            println!("    1. Chat:     zeroclaw agent -m \"Hello!\"");
+            println!("    1. Chat:     mclaw agent -m \"Hello!\"");
             println!("    2. Gateway:  mclaw gateway");
-            println!("    3. Status:   zeroclaw status");
+            println!("    3. Status:   mclaw status");
         } else if provider_supports_device_flow(&provider_name) {
             if canonical_provider_name(&provider_name) == "copilot" {
-                println!("    1. Chat:              zeroclaw agent -m \"Hello!\"");
+                println!("    1. Chat:              mclaw agent -m \"Hello!\"");
                 println!("       (device / OAuth auth will prompt on first run)");
                 println!("    2. Gateway:           mclaw gateway");
-                println!("    3. Status:            zeroclaw status");
+                println!("    3. Status:            mclaw status");
             } else {
                 println!(
-                    "    1. Login:             zeroclaw auth login --provider {}",
+                    "    1. Login:             mclaw auth login --provider {}",
                     provider_name
                 );
-                println!("    2. Chat:              zeroclaw agent -m \"Hello!\"");
+                println!("    2. Chat:              mclaw agent -m \"Hello!\"");
                 println!("    3. Gateway:           mclaw gateway");
-                println!("    4. Status:            zeroclaw status");
+                println!("    4. Status:            mclaw status");
             }
         } else {
             let env_var = provider_env_var(&provider_name);
             println!("    1. Set your API key:  export {env_var}=\"sk-...\"");
             println!("    2. Or edit:           ~/.mclaw/config.toml");
-            println!("    3. Chat:              zeroclaw agent -m \"Hello!\"");
+            println!("    3. Chat:              mclaw agent -m \"Hello!\"");
             println!("    4. Gateway:           mclaw gateway");
         }
     } else {
-        println!("    1. Chat:     zeroclaw agent -m \"Hello!\"");
+        println!("    1. Chat:     mclaw agent -m \"Hello!\"");
         println!("    2. Gateway:  mclaw gateway");
-        println!("    3. Status:   zeroclaw status");
+        println!("    3. Status:   mclaw status");
     }
     println!();
 
@@ -1822,7 +1822,7 @@ pub async fn run_models_list(config: &Config, provider_override: Option<&str>) -
     let Some(cached) = cached else {
         println!();
         println!(
-            "  No cached models for '{provider_name}'. Run: zeroclaw models refresh --provider {provider_name}"
+            "  No cached models for '{provider_name}'. Run: mclaw models refresh --provider {provider_name}"
         );
         println!();
         return Ok(());
@@ -4218,7 +4218,7 @@ fn setup_channels() -> Result<ChannelsConfig> {
 
                 let verify_token: String = Input::new()
                     .with_prompt("  Webhook verify token (create your own)")
-                    .default("zeroclaw-whatsapp-verify".into())
+                    .default("mclaw-whatsapp-verify".into())
                     .interact_text()?;
 
                 // Test connection (run entirely in separate thread — Response must be used/dropped there)
@@ -5663,7 +5663,7 @@ fn print_summary(config: &Config) {
             println!(
                 "       {}",
                 style(
-                    "or: zeroclaw auth paste-token --provider anthropic --auth-kind authorization"
+                    "or: mclaw auth paste-token --provider anthropic --auth-kind authorization"
                 )
                 .yellow()
             );
@@ -5888,7 +5888,7 @@ mod tests {
         let _workspace_env = EnvVarGuard::unset("MCLAW_WORKSPACE");
         let _config_env = EnvVarGuard::unset("ZEROCLAW_CONFIG_DIR");
         let tmp = TempDir::new().unwrap();
-        let mclaw_dir = tmp.path().join(".zeroclaw");
+        let mclaw_dir = tmp.path().join(".mclaw");
         let config_path = mclaw_dir.join("config.toml");
 
         tokio::fs::create_dir_all(&mclaw_dir).await.unwrap();
@@ -5918,7 +5918,7 @@ mod tests {
         let _workspace_env = EnvVarGuard::unset("MCLAW_WORKSPACE");
         let _config_env = EnvVarGuard::unset("ZEROCLAW_CONFIG_DIR");
         let tmp = TempDir::new().unwrap();
-        let mclaw_dir = tmp.path().join(".zeroclaw");
+        let mclaw_dir = tmp.path().join(".mclaw");
         let config_path = mclaw_dir.join("config.toml");
 
         tokio::fs::create_dir_all(&mclaw_dir).await.unwrap();
@@ -5953,7 +5953,7 @@ mod tests {
     async fn quick_setup_respects_zero_claw_workspace_env_layout() {
         let _env_guard = env_lock().lock().await;
         let tmp = TempDir::new().unwrap();
-        let workspace_root = tmp.path().join("zeroclaw-data");
+        let workspace_root = tmp.path().join("mclaw-data");
         let workspace_dir = workspace_root.join("workspace");
         let expected_config_path = workspace_root.join(".mclaw").join("config.toml");
 

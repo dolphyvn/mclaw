@@ -791,12 +791,12 @@ mod tests {
             vec![],
             None,
             None,
-            Some(PathBuf::from("/tmp/zeroclaw")),
+            Some(PathBuf::from("/tmp/mclaw")),
         );
 
         assert_eq!(
             ch.matrix_store_dir(),
-            Some(PathBuf::from("/tmp/zeroclaw/state/matrix"))
+            Some(PathBuf::from("/tmp/mclaw/state/matrix"))
         );
     }
 

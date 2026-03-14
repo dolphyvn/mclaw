@@ -2355,12 +2355,12 @@ mod tests {
             "https://example.com",
             Some("k"),
             AuthStyle::Bearer,
-            "zeroclaw-test/1.0",
+            "mclaw-test/1.0",
         );
         let caps = <OpenAiCompatibleProvider as Provider>::capabilities(&p);
         assert!(caps.native_tool_calling);
         assert!(!caps.vision);
-        assert_eq!(p.user_agent.as_deref(), Some("zeroclaw-test/1.0"));
+        assert_eq!(p.user_agent.as_deref(), Some("mclaw-test/1.0"));
     }
 
     #[test]
@@ -2370,13 +2370,13 @@ mod tests {
             "https://example.com",
             Some("k"),
             AuthStyle::Bearer,
-            "zeroclaw-test/vision",
+            "mclaw-test/vision",
             true,
         );
         let caps = <OpenAiCompatibleProvider as Provider>::capabilities(&p);
         assert!(caps.native_tool_calling);
         assert!(caps.vision);
-        assert_eq!(p.user_agent.as_deref(), Some("zeroclaw-test/vision"));
+        assert_eq!(p.user_agent.as_deref(), Some("mclaw-test/vision"));
     }
 
     #[test]

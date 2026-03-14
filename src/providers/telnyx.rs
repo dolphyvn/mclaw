@@ -27,8 +27,8 @@ use serde::Deserialize;
 /// # Example
 ///
 /// ```rust,ignore
-/// use zeroclaw::providers::telnyx::TelnyxProvider;
-/// use zeroclaw::providers::Provider;
+/// use mclaw::providers::telnyx::TelnyxProvider;
+/// use mclaw::providers::Provider;
 ///
 /// let provider = TelnyxProvider::new(Some("your-api-key"));
 /// let response = provider.chat("Hello!", "openai/gpt-4o", 0.7).await?;
@@ -48,7 +48,7 @@ impl TelnyxProvider {
     ///
     /// The API key can be provided directly or will be resolved from:
     /// 1. `TELNYX_API_KEY` environment variable
-    /// 2. `ZEROCLAW_API_KEY` environment variable (fallback)
+    /// 2. `MCLAW_API_KEY` environment variable (fallback)
     pub fn new(api_key: Option<&str>) -> Self {
         let resolved_key = resolve_telnyx_api_key(api_key);
         Self {

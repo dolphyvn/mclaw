@@ -197,7 +197,7 @@ ID to the channel allowlist so the agent will respond to messages \
 from that identity.
 
 Examples:
-  mclaw channel bind-telegram zeroclaw_user
+  mclaw channel bind-telegram alice
   mclaw channel bind-telegram 123456789")]
     BindTelegram {
         /// Telegram identity to allow (username without '@' or numeric user ID)

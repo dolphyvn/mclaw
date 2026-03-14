@@ -448,7 +448,7 @@ impl TelegramChannel {
         let home = UserDirs::new()
             .map(|u| u.home_dir().to_path_buf())
             .context("Could not find home directory")?;
-        let mclaw_dir = home.join(".zeroclaw");
+        let mclaw_dir = home.join(".mclaw");
         let config_path = mclaw_dir.join("config.toml");
 
         let contents = fs::read_to_string(&config_path)
@@ -2578,7 +2578,7 @@ impl Channel for TelegramChannel {
                 if error_code == 409 {
                     tracing::warn!(
                         "Telegram polling conflict (409): {description}. \
-Ensure only one `zeroclaw` process is using this bot token."
+Ensure only one `mclaw` process is using this bot token."
                     );
                     // Back off for 35 seconds — longer than Telegram's 30-second poll
                     // timeout — so any competing session (e.g. a stale connection from
@@ -2970,7 +2970,7 @@ mod tests {
     #[test]
     fn telegram_extract_bind_code_supports_bot_mention() {
         assert_eq!(
-            TelegramChannel::extract_bind_code("/bind@zeroclaw_bot 654321"),
+            TelegramChannel::extract_bind_code("/bind@mclaw_bot 654321"),
             Some("654321")
         );
     }
@@ -4179,7 +4179,7 @@ mod tests {
             "chat": { "id": chat_id },
             "reply_to_message": {
                 "message_id": message_id,
-                "from": { "username": "zeroclaw_user" },
+                "from": { "username": "mclaw_user" },
                 "voice": { "file_id": "test_file", "duration": 1 }
             }
         });

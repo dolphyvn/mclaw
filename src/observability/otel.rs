@@ -387,7 +387,7 @@ mod tests {
     fn test_observer() -> OtelObserver {
         // Create with a dummy endpoint — exports will silently fail
         // but the observer itself works fine for recording
-        OtelObserver::new(Some("http://127.0.0.1:19999"), Some("zeroclaw-test"))
+        OtelObserver::new(Some("http://127.0.0.1:19999"), Some("mclaw-test"))
             .expect("observer creation should not fail with valid endpoint format")
     }
 
@@ -521,7 +521,7 @@ mod tests {
     #[test]
     fn otel_observer_creation_with_valid_endpoint_succeeds() {
         // Even though endpoint is unreachable, creation should succeed
-        let result = OtelObserver::new(Some("http://127.0.0.1:12345"), Some("zeroclaw-test"));
+        let result = OtelObserver::new(Some("http://127.0.0.1:12345"), Some("mclaw-test"));
         assert!(
             result.is_ok(),
             "observer creation must succeed even with unreachable endpoint"

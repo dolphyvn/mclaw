@@ -90,7 +90,7 @@ pub fn flash_arduino_firmware(port: &str) -> Result<()> {
     ensure_arduino_cli()?;
     ensure_avr_core()?;
 
-    let temp_dir = std::env::temp_dir().join(format!("zeroclaw_flash_{}", uuid::Uuid::new_v4()));
+    let temp_dir = std::env::temp_dir().join(format!("mclaw_flash_{}", uuid::Uuid::new_v4()));
     let sketch_dir = temp_dir.join(SKETCH_NAME);
     let ino_path = sketch_dir.join(format!("{}.ino", SKETCH_NAME));
 

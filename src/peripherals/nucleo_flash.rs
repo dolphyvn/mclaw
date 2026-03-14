@@ -29,12 +29,12 @@ pub fn flash_nucleo_firmware() -> Result<()> {
         );
     }
 
-    // CARGO_MANIFEST_DIR = repo root (zeroclaw's Cargo.toml)
+    // CARGO_MANIFEST_DIR = repo root (mclaw's Cargo.toml)
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let firmware_dir = repo_root.join("firmware").join("nucleo");
     if !firmware_dir.join("Cargo.toml").exists() {
         anyhow::bail!(
-            "Nucleo firmware not found at {}. Run from zeroclaw repo root.",
+            "Nucleo firmware not found at {}. Run from mclaw repo root.",
             firmware_dir.display()
         );
     }

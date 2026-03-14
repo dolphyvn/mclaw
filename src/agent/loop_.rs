@@ -955,7 +955,7 @@ fn parse_perl_style_tool_calls(response: &str) -> Vec<ParsedToolCall> {
 /// ```text
 /// <FunctionCall>
 /// file_read
-/// <code>path>/Users/kylelampa/Documents/zeroclaw/README.md</code>
+/// <code>path>/Users/kylelampa/Documents/mclaw/README.md</code>
 /// </FunctionCall>
 /// ```
 fn parse_function_call_tool_calls(response: &str) -> Vec<ParsedToolCall> {

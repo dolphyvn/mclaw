@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 mod audit;
 
 const OPEN_SKILLS_REPO_URL: &str = "https://github.com/besoeasy/open-skills";
-const OPEN_SKILLS_SYNC_MARKER: &str = ".zeroclaw-open-skills-sync";
+const OPEN_SKILLS_SYNC_MARKER: &str = ".mclaw-open-skills-sync";
 const OPEN_SKILLS_SYNC_INTERVAL_SECS: u64 = 60 * 60 * 24 * 7;
 
 /// A skill is a user-defined or community-built capability.
@@ -623,8 +623,8 @@ pub fn init_skills_dir(workspace_dir: &Path) -> Result<()> {
              The agent will read it and follow the instructions.\n\n\
              ## Installing community skills\n\n\
              ```bash\n\
-             zeroclaw skills install <source>\n\
-             zeroclaw skills list\n\
+             mclaw skills install <source>\n\
+             mclaw skills list\n\
              ```\n",
         )?;
     }
@@ -840,7 +840,7 @@ pub fn handle_command(command: crate::SkillCommands, config: &crate::config::Con
                 println!("  Create one: mkdir -p ~/.mclaw/workspace/skills/my-skill");
                 println!("              echo '# My Skill' > ~/.mclaw/workspace/skills/my-skill/SKILL.md");
                 println!();
-                println!("  Or install: zeroclaw skills install <source>");
+                println!("  Or install: mclaw skills install <source>");
             } else {
                 println!("Installed skills ({}):", skills.len());
                 println!();
@@ -1370,7 +1370,7 @@ description = "Bare minimum"
 
     #[test]
     fn skills_dir_path() {
-        let base = std::path::Path::new("/home/user/.zeroclaw");
+        let base = std::path::Path::new("/home/user/.mclaw");
         let dir = skills_dir(base);
         assert_eq!(dir, PathBuf::from("/home/user/.mclaw/skills"));
     }

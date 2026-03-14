@@ -2529,7 +2529,7 @@ async fn bind_telegram_identity(config: &Config, identity: &str) -> Result<()> {
         Err(e) => {
             eprintln!(
                 "⚠️ Allowlist saved, but failed to reload daemon service automatically: {e}\n\
-                 Restart service manually with `mclaw service stop && zeroclaw service start`."
+                 Restart service manually with `mclaw service stop && mclaw service start`."
             );
         }
     }
@@ -2544,7 +2544,7 @@ fn maybe_restart_managed_daemon_service() -> Result<bool> {
         let plist = home
             .join("Library")
             .join("LaunchAgents")
-            .join("com.zeroclaw.daemon.plist");
+            .join("com.mclaw.daemon.plist");
         if !plist.exists() {
             return Ok(false);
         }
@@ -2554,15 +2554,15 @@ fn maybe_restart_managed_daemon_service() -> Result<bool> {
             .output()
             .context("Failed to query launchctl list")?;
         let listed = String::from_utf8_lossy(&list_output.stdout);
-        if !listed.contains("com.zeroclaw.daemon") {
+        if !listed.contains("com.mclaw.daemon") {
             return Ok(false);
         }
 
         let _ = Command::new("launchctl")
-            .args(["stop", "com.zeroclaw.daemon"])
+            .args(["stop", "com.mclaw.daemon"])
             .output();
         let start_output = Command::new("launchctl")
-            .args(["start", "com.zeroclaw.daemon"])
+            .args(["start", "com.mclaw.daemon"])
             .output()
             .context("Failed to start launchd daemon service")?;
         if !start_output.status.success() {
@@ -2575,7 +2575,7 @@ fn maybe_restart_managed_daemon_service() -> Result<bool> {
 
     if cfg!(target_os = "linux") {
         // OpenRC (system-wide) takes precedence over systemd (user-level)
-        let openrc_init_script = PathBuf::from("/etc/init.d/zeroclaw");
+        let openrc_init_script = PathBuf::from("/etc/init.d/mclaw");
         if openrc_init_script.exists() {
             if let Ok(status_output) = Command::new("rc-service").args(OPENRC_STATUS_ARGS).output()
             {
@@ -2659,9 +2659,9 @@ pub(crate) async fn handle_command(command: crate::ChannelCommands, config: &Con
                     "  ℹ️ Lark/Feishu channel support is disabled in this build (enable `channel-lark`)."
                 );
             }
-            println!("\nTo start channels: zeroclaw channel start");
-            println!("To check health:    zeroclaw channel doctor");
-            println!("To configure:      zeroclaw onboard");
+            println!("\nTo start channels: mclaw channel start");
+            println!("To check health:    mclaw channel doctor");
+            println!("To configure:      mclaw onboard");
             Ok(())
         }
         crate::ChannelCommands::Add {
@@ -6494,7 +6494,7 @@ This is an example JSON object for profile settings."#;
             runtime_ctx,
             traits::ChannelMessage {
                 id: "msg-photo-1".to_string(),
-                sender: "zeroclaw_user".to_string(),
+                sender: "mclaw_user".to_string(),
                 reply_target: "chat-photo".to_string(),
                 content: "[IMAGE:/tmp/workspace/photo_99_1.jpg]\n\nWhat is this?".to_string(),
                 channel: "test-channel".to_string(),
@@ -6559,7 +6559,7 @@ This is an example JSON object for profile settings."#;
             Arc::clone(&runtime_ctx),
             traits::ChannelMessage {
                 id: "msg-photo-1".to_string(),
-                sender: "zeroclaw_user".to_string(),
+                sender: "mclaw_user".to_string(),
                 reply_target: "chat-photo".to_string(),
                 content: "[IMAGE:/tmp/workspace/photo_99_1.jpg]\n\nWhat is this?".to_string(),
                 channel: "test-channel".to_string(),
@@ -6574,7 +6574,7 @@ This is an example JSON object for profile settings."#;
             Arc::clone(&runtime_ctx),
             traits::ChannelMessage {
                 id: "msg-text-2".to_string(),
-                sender: "zeroclaw_user".to_string(),
+                sender: "mclaw_user".to_string(),
                 reply_target: "chat-photo".to_string(),
                 content: "What is WAL?".to_string(),
                 channel: "test-channel".to_string(),
@@ -6604,7 +6604,7 @@ This is an example JSON object for profile settings."#;
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let turns = histories
-            .get("test-channel_zeroclaw_user")
+            .get("test-channel_mclaw_user")
             .expect("history should exist for sender");
         assert_eq!(turns.len(), 2);
         assert_eq!(turns[0].role, "user");

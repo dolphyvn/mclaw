@@ -3640,7 +3640,7 @@ pub struct AuditConfig {
     #[serde(default = "default_audit_enabled")]
     pub enabled: bool,
 
-    /// Path to audit log file (relative to zeroclaw dir)
+    /// Path to audit log file (relative to mclaw config dir)
     #[serde(default = "default_audit_log_path")]
     pub log_path: String,
 
@@ -4120,7 +4120,7 @@ fn encrypt_secret(
 fn config_dir_creation_error(path: &Path) -> String {
     format!(
         "Failed to create config directory: {}. If running as an OpenRC service, \
-         ensure this path is writable by user 'zeroclaw'.",
+         ensure this path is writable by user 'mclaw'.",
         path.display()
     )
 }
@@ -5105,8 +5105,8 @@ mod tests {
 
     #[test]
     async fn config_dir_creation_error_mentions_openrc_and_path() {
-        let msg = config_dir_creation_error(Path::new("/etc/zeroclaw"));
-        assert!(msg.contains("/etc/zeroclaw"));
+        let msg = config_dir_creation_error(Path::new("/etc/mclaw"));
+        assert!(msg.contains("/etc/mclaw"));
         assert!(msg.contains("OpenRC"));
         assert!(msg.contains("mclaw"));
     }

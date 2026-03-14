@@ -1289,7 +1289,7 @@ impl Provider for GeminiProvider {
                         .await?
                         .ok_or_else(|| {
                             anyhow::anyhow!(
-                                "Gemini auth profile not found or expired. Run: zeroclaw auth login --provider gemini"
+                                "Gemini auth profile not found or expired. Run: mclaw auth login --provider gemini"
                             )
                         })?;
 
