@@ -45,14 +45,19 @@ pub struct ClientGroup {
     /// Hashed client secret for authentication
     pub client_secret: String,
 
-    /// Provider to use for this group (openrouter, openai, anthropic, glm, ollama)
+    /// Provider to use for this group (openrouter, openai, openai-codex, anthropic, glm, ollama, etc.)
     pub provider: String,
 
     /// Default model to use
     pub model: String,
 
-    /// API key for this provider (stored per-client for multi-tenant)
+    /// API key for this provider (required for most providers, optional for OAuth-based providers)
+    #[serde(default)]
     pub api_key: String,
+
+    /// Optional: OAuth auth profile name (for providers like openai-codex, copilot, gemini-oauth, etc.)
+    #[serde(default)]
+    pub auth_profile: Option<String>,
 
     /// Optional: API base URL for custom endpoints
     #[serde(default)]

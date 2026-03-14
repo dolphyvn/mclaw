@@ -145,6 +145,40 @@ api_url = "http://localhost:11434"  # Ollama local endpoint
 api_key = ""  # Ollama doesn't need API key
 ```
 
+---
+
+### Using ChatGPT Plus Subscription (OAuth)
+
+MClaw supports using your ChatGPT Plus subscription via OAuth authentication instead of API keys.
+
+#### Step 1: Login with OpenAI OAuth (on gateway server)
+
+```bash
+# Run this ON THE GATEWAY SERVER machine
+./target/debug/mclaw auth login openai --profile chatgpt-plus
+```
+
+Follow the prompts to log in with your OpenAI/ChatGPT account. This will store OAuth tokens that the gateway can use.
+
+#### Step 2: Configure group to use OAuth
+
+```toml
+# Group using ChatGPT Plus subscription (OAuth)
+[multi_tenant.groups.chatgpt-plus]
+client_id = "chatgpt-plus"
+client_secret = "mc_chatgpt-plus_..."
+provider = "openai-codex"  # Uses OAuth
+model = "gpt-4o"
+auth_profile = "chatgpt-plus"  # Must match the profile from 'mclaw auth login'
+# api_key not needed when using auth_profile
+```
+
+**Supported OAuth providers:**
+- `openai-codex` / `codex` - OpenAI/ChatGPT OAuth (uses your chatgpt.com account)
+- `gemini-oauth` / `gemini_oauth` - Google Gemini OAuth
+
+---
+
 ### Step 3: List Configured Clients
 
 Verify your configuration:
@@ -309,7 +343,11 @@ client_id = "group-name"           # Unique identifier
 client_secret = "mc_..."           # Generated secret
 provider = "openrouter"            # Provider name
 model = "model-name"               # Model to use
+
+# Authentication (use one)
 api_key = "your-api-key"           # API key for this provider
+# OR
+auth_profile = "profile-name"      # OAuth profile (for openai-codex, gemini-oauth)
 
 # Optional fields
 api_url = "https://..."            # Custom API endpoint
@@ -317,6 +355,11 @@ temperature = 0.7                  # Temperature (0.0-1.0)
 max_tokens = 4096                  # Max tokens per response
 rate_limit = 60                    # Requests per minute limit
 ```
+
+**Note:** For OAuth-based providers (`openai-codex`, `gemini-oauth`):
+1. Run `mclaw auth login <provider> --profile <profile-name>` on the gateway server first
+2. Use `auth_profile` instead of `api_key` in the group configuration
+3. The `api_key` field can be empty or omitted when using `auth_profile`
 
 ---
 

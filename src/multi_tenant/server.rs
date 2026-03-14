@@ -1,9 +1,11 @@
 //! Multi-tenant gateway HTTP server.
 
 use super::auth::AuthManager;
+use anyhow::Context;
 use base64::Engine;
+use crate::auth::AuthService;
 use crate::config::Config;
-use crate::providers::{ChatMessage, Provider};
+use crate::providers::{ChatMessage, Provider, ProviderRuntimeOptions};
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -14,6 +16,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::signal;
 use tower_http::cors::{Any, CorsLayer};
@@ -25,6 +28,8 @@ pub struct GatewayState {
     pub config: Config,
     pub providers: Arc<HashMap<String, Arc<dyn Provider>>>,
     pub auth: Arc<AuthManager>,
+    /// Auth service for OAuth-based providers
+    pub auth_service: Arc<AuthService>,
 }
 
 /// Run the multi-tenant gateway server.
@@ -33,18 +38,32 @@ pub async fn run_gateway_server(
     host: String,
     port: u16,
 ) -> anyhow::Result<()> {
-    // Initialize auth manager
-    let auth = Arc::new(AuthManager::new());
+    // Initialize auth manager for client authentication
+    let client_auth = Arc::new(AuthManager::new());
     if let Some(multi_tenant) = &config.multi_tenant {
-        auth.load_from_config(&multi_tenant.groups).await;
+        client_auth.load_from_config(&multi_tenant.groups).await;
     }
 
-    // Create provider instances for each unique provider+api_key combination
+    // Initialize auth service for OAuth-based providers
+    let state_dir = config
+        .config_path
+        .parent()
+        .context("Config path must have a parent directory")?
+        .to_path_buf();
+    let auth_service = Arc::new(AuthService::new(&state_dir, config.secrets.encrypt));
+
+    // Create provider instances for each unique provider configuration
     let mut providers = HashMap::new();
 
     if let Some(multi_tenant) = &config.multi_tenant {
         for (_group_name, group) in &multi_tenant.groups {
-            let provider_key = format!("{}:{}", group.provider, group.api_key.chars().take(4).collect::<String>());
+            // Create a unique key for this provider configuration
+            // For OAuth providers, include the auth_profile in the key
+            let provider_key = if let Some(ref auth_profile) = group.auth_profile {
+                format!("{}:auth:{}", group.provider, auth_profile)
+            } else {
+                format!("{}:key:{}", group.provider, group.api_key.chars().take(4).collect::<String>())
+            };
 
             if !providers.contains_key(&provider_key) {
                 let provider = create_provider(
@@ -52,6 +71,10 @@ pub async fn run_gateway_server(
                     &group.api_key,
                     group.api_url.as_deref(),
                     &group.model,
+                    group.auth_profile.as_deref(),
+                    &config,
+                    &auth_service,
+                    &state_dir,
                 )?;
                 providers.insert(provider_key, provider);
             }
@@ -61,7 +84,8 @@ pub async fn run_gateway_server(
     let state = GatewayState {
         config: config.clone(),
         providers: Arc::new(providers),
-        auth,
+        auth: client_auth,
+        auth_service,
     };
 
     // Build router
@@ -87,7 +111,10 @@ pub async fn run_gateway_server(
     if let Some(multi_tenant) = &config.multi_tenant {
         println!("   Configured clients: {}", multi_tenant.groups.len());
         for (name, group) in &multi_tenant.groups {
-            println!("     - {} -> {} ({})", name, group.provider, group.model);
+            let auth_type = group.auth_profile.as_ref()
+                .map(|p| format!("OAuth ({}))", p))
+                .unwrap_or_else(|| "API Key".to_string());
+            println!("     - {} -> {} ({}) [{}]", name, group.provider, group.model, auth_type);
         }
     }
     println!();
@@ -106,7 +133,51 @@ fn create_provider(
     api_key: &str,
     api_url: Option<&str>,
     model: &str,
+    auth_profile: Option<&str>,
+    config: &Config,
+    auth_service: &AuthService,
+    state_dir: &PathBuf,
 ) -> anyhow::Result<Arc<dyn Provider>> {
+    // Providers that use OAuth authentication
+    let oauth_providers = [
+        "openai-codex", "openai_codex", "codex",
+        "gemini-oauth", "gemini_oauth",
+    ];
+
+    let is_oauth = oauth_providers.contains(&provider_type) || auth_profile.is_some();
+
+    if is_oauth {
+        // Use OAuth-based provider creation
+        let profile = auth_profile.unwrap_or("default");
+        let options = ProviderRuntimeOptions {
+            zeroclaw_dir: Some(state_dir.clone()),
+            secrets_encrypt: config.secrets.encrypt,
+            auth_profile_override: Some(profile.to_string()),
+            ..Default::default()
+        };
+
+        return match provider_type {
+            "openai-codex" | "openai_codex" | "codex" => {
+                Ok(Arc::new(crate::providers::openai_codex::OpenAiCodexProvider::new(
+                    &options,
+                    None, // gateway_api_key
+                )?))
+            }
+            "gemini-oauth" | "gemini_oauth" => {
+                Ok(Arc::new(crate::providers::gemini::GeminiProvider::new_with_auth(
+                    None, // api_key - use OAuth instead
+                    auth_service.clone(),
+                    Some(profile.to_string()),
+                )))
+            }
+            _ => {
+                // For other OAuth providers, try to use the compatible provider with auth
+                anyhow::bail!("OAuth provider '{}' not yet supported in gateway. Use API key instead.", provider_type)
+            }
+        };
+    }
+
+    // Standard API key-based providers
     match provider_type {
         "openrouter" => {
             Ok(Arc::new(crate::providers::openrouter::OpenRouterProvider::new(
@@ -136,7 +207,49 @@ fn create_provider(
                 Some(false),
             )))
         }
+        "gemini" | "google" | "google-gemini" => {
+            Ok(Arc::new(crate::providers::gemini::GeminiProvider::new(
+                Some(api_key),
+            )))
+        }
+        "groq" => {
+            Ok(Arc::new(crate::providers::compatible::OpenAiCompatibleProvider::new(
+                "Groq",
+                api_url.unwrap_or("https://api.groq.com/openai/v1"),
+                Some(api_key),
+                crate::providers::compatible::AuthStyle::Bearer,
+            )))
+        }
+        "deepseek" => {
+            Ok(Arc::new(crate::providers::compatible::OpenAiCompatibleProvider::new(
+                "DeepSeek",
+                api_url.unwrap_or("https://api.deepseek.com"),
+                Some(api_key),
+                crate::providers::compatible::AuthStyle::Bearer,
+            )))
+        }
+        "mistral" => {
+            Ok(Arc::new(crate::providers::compatible::OpenAiCompatibleProvider::new(
+                "Mistral",
+                api_url.unwrap_or("https://api.mistral.ai/v1"),
+                Some(api_key),
+                crate::providers::compatible::AuthStyle::Bearer,
+            )))
+        }
+        "xai" | "grok" => {
+            Ok(Arc::new(crate::providers::compatible::OpenAiCompatibleProvider::new(
+                "xAI",
+                api_url.unwrap_or("https://api.x.ai/v1"),
+                Some(api_key),
+                crate::providers::compatible::AuthStyle::Bearer,
+            )))
+        }
+        "bedrock" | "aws-bedrock" => {
+            // AWS Bedrock uses different auth, requires AWS credentials
+            anyhow::bail!("AWS Bedrock provider requires AWS credentials. Use API key providers or configure AWS credentials on the gateway server.")
+        }
         _ => {
+            // Try as OpenAI-compatible provider
             if let Some(base_url) = api_url {
                 Ok(Arc::new(
                     crate::providers::compatible::OpenAiCompatibleProvider::new(
@@ -147,7 +260,7 @@ fn create_provider(
                     ),
                 ))
             } else {
-                anyhow::bail!("Unknown provider type: {}", provider_type)
+                anyhow::bail!("Unknown provider type: {}. Specify api_url for custom endpoints.", provider_type)
             }
         }
     }
@@ -258,7 +371,12 @@ async fn handle_chat(
     );
 
     // Get or create the provider for this group
-    let provider_key = format!("{}:{}", group.provider, group.api_key.chars().take(4).collect::<String>());
+    let provider_key = if let Some(ref auth_profile) = group.auth_profile {
+        format!("{}:auth:{}", group.provider, auth_profile)
+    } else {
+        format!("{}:key:{}", group.provider, group.api_key.chars().take(4).collect::<String>())
+    };
+
     let provider = match state.providers.get(&provider_key) {
         Some(p) => p.clone(),
         None => {
@@ -320,6 +438,8 @@ async fn list_clients(State(state): State<GatewayState>) -> impl IntoResponse {
                         "client_id": name,
                         "provider": group.provider,
                         "model": group.model,
+                        "auth_type": if group.auth_profile.is_some() { "oauth" } else { "api_key" },
+                        "auth_profile": group.auth_profile,
                         "rate_limit": group.rate_limit,
                     })
                 })
