@@ -1,16 +1,18 @@
-# ZeroClaw Architecture Diagrams
+# MClaw Architecture Diagrams
 
-This document provides visual representations of ZeroClaw's architecture, execution modes, and data flows.
+This document provides visual representations of MClaw's architecture, execution modes, and data flows.
+
+**Last updated:** March 14, 2026
 
 ---
 
 ## 1. Execution Modes
 
-**Ways ZeroClaw can be run:**
+**Ways MClaw can be run:**
 
 ```mermaid
 flowchart TD
-    Start[zeroclaw CLI] --> Onboard[onboard<br/>Setup wizard]
+    Start[mclaw CLI] --> Onboard[onboard<br/>Setup wizard]
     Start --> Agent[agent<br/>Interactive CLI]
     Start --> Gateway[gateway<br/>HTTP server]
     Start --> Daemon[daemon<br/>Long-running runtime]
@@ -25,6 +27,7 @@ flowchart TD
     Start --> Migrate[migrate<br/>Data import]
     Start --> Skills[skills<br/>User capabilities]
     Start --> Integrations[integrations<br/>Browse 50+ apps]
+    Start --> Dispatcher[dispatcher<br/>Multi-machine router]
 
     Agent --> AgentSingle[-m message<br/>One-shot]
     Agent --> AgentInteractive[Interactive REPL<br/>stdin/stdout]
@@ -60,6 +63,7 @@ flowchart TB
         RAG[rag/<br/>Hardware Documentation]
         Cron[cron/<br/>Scheduler]
         Skills[skills/<br/>User Capabilities]
+        Dispatcher[dispatcher/<br/>Multi-machine Router]
     end
 
     subgraph Integrations[Integrations]
@@ -73,6 +77,7 @@ flowchart TB
     Main --> Gateway
     Main --> Daemon
     Main --> Channels
+    Main --> Dispatcher
 
     Agent --> Providers
     Agent --> Tools
@@ -84,7 +89,13 @@ flowchart TB
     Agent --> Skills
 
     Channels --> Agent
+    Channels --> Dispatcher
+
     Gateway --> Agent
+    Gateway --> Tunnel
+
+    Dispatcher --> Gateway
+    Dispatcher --> Channels
 
     Daemon --> Gateway
     Daemon --> Channels
@@ -93,13 +104,12 @@ flowchart TB
 
     Tools --> Composio
     Tools --> Browser
-    Gateway --> Tunnel
 
     classDef coreComp fill:#4A90E2,stroke:#1E3A5F,color:#fff
     classDef integComp fill:#50C878,stroke:#1E3A5F,color:#fff
     classDef cliComp fill:#F5A623,stroke:#1E3A5F,color:#fff
 
-    class Config,Agent,Providers,Channels,Tools,Memory,Security,Runtime,Gateway,Daemon,Peripherals,Observability,RAG,Cron,Skills coreComp
+    class Config,Agent,Providers,Channels,Tools,Memory,Security,Runtime,Gateway,Daemon,Peripherals,Observability,RAG,Cron,Skills,Dispatcher coreComp
     class Composio,Browser,Tunnel integComp
     class Main cliComp
 ```
@@ -286,13 +296,151 @@ flowchart TB
 
 ---
 
-## 6. Gateway HTTP Endpoints
+## 6. Multi-Machine Dispatcher Architecture
+
+**How the dispatcher routes commands to multiple MClaw instances:**
+
+```mermaid
+flowchart TB
+    subgraph Telegram[Telegram Bot]
+        Bot[One Bot]
+    end
+
+    subgraph Dispatcher[Dispatcher Service]
+        Webhook[/webhook<br/>Telegram webhook]
+        Router[Command Router<br/>Parse @machine prefix]
+        Registry[Machine Registry<br/>Static + Dynamic]
+        ClientWS[WebSocket Client<br/>Connect to machines]
+        Health[Health Tracker<br/>Heartbeat monitoring]
+    end
+
+    subgraph Machines[MClaw Client Machines]
+        M1[Client 1<br/>client1<br/>localhost:42618]
+        M2[Client 2<br/>client2<br/>51.255.93.22:42618]
+        M3[Client N<br/>clientN<br/>...]
+    end
+
+    subgraph API[HTTP API]
+        HealthGET[GET /health<br/>Status check]
+        MachinesGET[GET /machines<br/>List machines]
+        AdminGET[GET /admin/machines<br/>Health status]
+        RegisterPOST[POST /register<br/>Dynamic reg]
+        UnregisterPOST[POST /unregister<br/>Remove machine]
+        HeartbeatPOST[POST /heartbeat<br/>Keep-alive]
+        DispatchPOST[POST /dispatch<br/>Test endpoint]
+    end
+
+    Bot -->|HTTPS webhook| Webhook
+    Webhook --> Router
+
+    Router -->|Parse @machine| Parse{Machine<br/>prefix?}
+
+    Parse -->|@machine| Target[Lookup target]
+    Parse -->|@all| Broadcast[All machines]
+    Parse -->|@list| List[Return list]
+    Parse -->|No prefix| Default[Use default]
+
+    Target --> Registry
+    Broadcast --> Registry
+    Default --> Registry
+
+    Registry --> ClientWS
+    ClientWS -->|WebSocket| M1
+    ClientWS -->|WebSocket| M2
+    ClientWS -->|WebSocket| M3
+
+    M1 -->|Response| ClientWS
+    M2 -->|Response| ClientWS
+    M3 -->|Response| ClientWS
+
+    ClientWS --> Aggregate[Aggregate responses]
+    Aggregate --> Reply[Send to Telegram]
+
+    Health --> Registry
+    Health -.->|Stale cleanup| Registry
+
+    API --> Dispatcher
+
+    classDef telegram fill:#50C878,stroke:#1E3A5F,color:#fff
+    classDef dispatcher fill:#4A90E2,stroke:#1E3A5F,color:#fff
+    classDef machine fill:#F5A623,stroke:#1E3A5F,color:#fff
+    classDef api fill:#E8F4FD,stroke:#4A90E2
+
+    class Bot telegram
+    class Webhook,Router,Registry,ClientWS,Health,Aggregate dispatcher
+    class M1,M2,M3 machine
+    class HealthGET,MachinesGET,AdminGET,RegisterPOST,UnregisterPOST,HeartbeatPOST,DispatchPOST api
+```
+
+**Command Routing Flow:**
+
+```mermaid
+sequenceDiagram
+    participant User as Telegram User
+    participant Bot as Telegram Bot
+    participant Disp as Dispatcher
+    participant M1 as Client 1
+    participant M2 as Client 2
+
+    User->>Bot: @client1 uptime
+    Bot->>Disp: POST /webhook
+    Disp->>Disp: Parse: target=client1
+    Disp->>M1: WebSocket: uptime
+    M1-->>Disp: Response: uptime info
+    Disp-->>Bot: POST sendMessage
+    Bot-->>User: uptime: 10 days...
+
+    Note over User,User: -----
+
+    User->>Bot: @all df -h
+    Bot->>Disp: POST /webhook
+    Disp->>Disp: Parse: target=@all
+    par Parallel execution
+        Disp->>M1: WebSocket: df -h
+        Disp->>M2: WebSocket: df -h
+    end
+    M1-->>Disp: Response: disk info
+    M2-->>Disp: Response: disk info
+    Disp-->>Bot: Aggregated responses
+    Bot-->>User: client1: ...<br/>client2: ...
+```
+
+**Dynamic Registration Flow:**
+
+```mermaid
+sequenceDiagram
+    participant Client as New MClaw Client
+    participant Disp as Dispatcher
+    participant Registry as Machine Registry
+    participant Health as Health Monitor
+
+    Client->>Disp: POST /register {machine_name, url, token}
+    Disp->>Registry: Validate auth token
+    Registry-->>Disp: Token valid
+    Disp->>Registry: Add machine
+    Registry-->>Disp: Registration OK
+    Disp-->>Client: 200 OK {status: registered}
+
+    loop Every 30 seconds
+        Client->>Disp: POST /heartbeat {machine_name}
+        Disp->>Health: Update last_seen
+        Health-->>Disp: OK
+        Disp-->>Client: 200 OK
+    end
+
+    Note over Health: No heartbeat for 60s
+    Health->>Registry: Remove stale machine
+```
+
+---
+
+## 7. Gateway HTTP Endpoints
 
 **The gateway's HTTP API structure:**
 
 ```mermaid
 flowchart TB
-    Client[HTTP Client] --> Gateway[ZeroClaw Gateway]
+    Client[HTTP Client] --> Gateway[MClaw Gateway]
 
     Gateway --> PairPOST[POST /pair<br/>Exchange one-time code<br/>for bearer token]
     Gateway --> HealthGET[GET /health<br/>Status check]
@@ -338,7 +486,7 @@ flowchart TB
 
 ---
 
-## 7. Channel Message Dispatch
+## 8. Channel Message Dispatch
 
 **How channels route messages to the agent:**
 
@@ -405,7 +553,7 @@ flowchart TB
 
 ---
 
-## 8. Memory System Architecture
+## 9. Memory System Architecture
 
 **Storage backends and data flow:**
 
@@ -471,7 +619,7 @@ flowchart TB
 
 ---
 
-## 9. Provider and Model Routing
+## 10. Provider and Model Routing
 
 **LLM provider abstraction and routing:**
 
@@ -531,7 +679,7 @@ flowchart TB
 
 ---
 
-## 10. Tool Execution Architecture
+## 11. Tool Execution Architecture
 
 **Tool registry, execution, and security:**
 
@@ -600,7 +748,7 @@ flowchart TB
 
 ---
 
-## 11. Configuration Loading
+## 12. Configuration Loading
 
 **How configuration is loaded and merged:**
 
@@ -652,7 +800,7 @@ flowchart TB
 
 ---
 
-## 12. Hardware Peripherals Integration
+## 13. Hardware Peripherals Integration
 
 **Hardware board support and control:**
 
@@ -716,7 +864,7 @@ flowchart TB
 
 ---
 
-## 13. Observable Events
+## 14. Observable Events
 
 **Telemetry and observability flow:**
 
@@ -779,7 +927,7 @@ flowchart TB
 
 ```mermaid
 mindmap
-    root((ZeroClaw))
+    root((MClaw))
         Modes
             Agent CLI
                 Interactive
@@ -790,6 +938,9 @@ mindmap
             Daemon
                 Supervised
                 Multi-component
+            Dispatcher
+                Multi-machine
+                Command routing
             Channels
                 12+ platforms
         Components
@@ -812,6 +963,10 @@ mindmap
                 Pairing
                 Approval
                 Policy
+            Dispatcher
+                Dynamic registry
+                Health tracking
+                @machine routing
         Integrations
             Composio
                 1000+ apps
@@ -825,8 +980,13 @@ mindmap
             Arduino
             ESP32
             RPi GPIO
+        Multi-Machine
+            @machine syntax
+            @all broadcast
+            Auto-registration
+            Heartbeat monitoring
 ```
 
 ---
 
-*Generated for ZeroClaw v0.1.0 - Architecture Documentation*
+*Generated for MClaw v0.1.0 - Architecture Documentation*
