@@ -166,21 +166,33 @@ sudo mkdir -p /etc/mclaw
 
 ## Part 3: Multi-Tenant Gateway Setup
 
-The Multi-Tenant Gateway centralizes all LLM API keys.
+The Multi-Tenant Gateway centralizes all LLM API keys on one server.
+
+**Important**: The Multi-Tenant Gateway runs on the **same server as the Dispatcher** (the central management server). Client machines connect to it for their LLM needs.
 
 ### Step 1: Generate Client Secrets
 
+First, generate unique secrets for each client group:
+
 ```bash
-# Generate secret for each client group
+# On the gateway server, run for each client
 mclaw generate-secret client1
+# Output: Client ID: client1
+#         Client Secret: mc_client1_abc123...
+
 mclaw generate-secret client2
 mclaw generate-secret group-a
 mclaw generate-secret group-b
+mclaw generate-secret dispatcher
 ```
+
+**Save these secrets** - you'll need them for both the gateway config and client configs.
 
 ### Step 2: Configure Gateway
 
-Create `/etc/mclaw/multi_tenant.toml`:
+The multi-tenant gateway configuration is stored in `/root/.mclaw/config.toml` on the gateway server.
+
+Edit the file to add or update the multi-tenant section:
 
 ```toml
 # Client 1 - Uses OpenRouter
@@ -194,7 +206,7 @@ api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
 # Client 2 - Uses OpenRouter
 [[groups]]
 client_id = "client2"
-client_secret = "mc_client2_..."
+client_secret = "mc_client2_..."  # Use generated secret
 provider = "openrouter"
 model = "anthropic/claude-sonnet-4.6"
 api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
@@ -202,7 +214,7 @@ api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
 # Group A - Free model
 [[groups]]
 client_id = "group-a"
-client_secret = "mc_group-a_..."
+client_secret = "mc_group-a_..."  # Use generated secret
 provider = "openrouter"
 model = "nvidia/nemotron-3-nano-30b-a3b:free"
 api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
@@ -210,7 +222,7 @@ api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
 # Group B - OpenAI
 [[groups]]
 client_id = "group-b"
-client_secret = "mc_group-b_..."
+client_secret = "mc_group-b_..."  # Use generated secret
 provider = "openai"
 model = "gpt-4o"
 api_key = "sk-proj-YOUR_OPENAI_KEY"
@@ -218,7 +230,7 @@ api_key = "sk-proj-YOUR_OPENAI_KEY"
 # Group C - GLM
 [[groups]]
 client_id = "group-c"
-client_secret = "mc_group-c_..."
+client_secret = "mc_group-c_..."  # Use generated secret
 provider = "glm"
 model = "glm-4"
 api_key = "your-id.secret"
@@ -226,13 +238,52 @@ api_key = "your-id.secret"
 # ChatGPT Plus (OAuth)
 [[groups]]
 client_id = "chatgpt-plus"
-client_secret = "mc_chatgpt-plus_..."
+client_secret = "mc_chatgpt-plus_..."  # Use generated secret
 provider = "openai-codex"
 model = "gpt-4o"
 auth_profile = "chatgpt-plus"
 ```
 
-### Step 3: Setup OAuth for ChatGPT Plus (Optional)
+### Step 3: Update Existing Config (Alternative)
+
+If the multi-tenant section already exists in `/root/.mclaw/config.toml`, update the client_secret values:
+
+```bash
+# Edit the config directly
+sudo nano /root/.mclaw/config.toml
+
+# Find the [multi_tenant.groups.client1] section
+# Update: client_secret = "mc_client1_..."  <- paste your generated secret
+```
+
+### Step 4: Restart Multi-Tenant Gateway
+
+After updating secrets, restart the service:
+
+```bash
+sudo systemctl restart mclaw-multi-tenant-gateway
+
+# Verify it's running
+sudo systemctl status mclaw-multi-tenant-gateway
+
+# Check loaded clients
+curl http://localhost:42620/api/v1/clients | jq .
+```
+
+You should see output like:
+```json
+[
+  {
+    "client_id": "client1",
+    "provider": "openrouter",
+    "model": "anthropic/claude-sonnet-4.6",
+    "auth_type": "api_key"
+  },
+  ...
+]
+```
+
+### Step 5: Setup OAuth for ChatGPT Plus (Optional)
 
 ```bash
 # Login to OpenAI OAuth on the gateway server
@@ -241,29 +292,36 @@ mclaw auth login openai --profile chatgpt-plus
 
 Follow the browser prompts to authenticate with your ChatGPT account.
 
-### Step 4: Test Multi-Tenant Gateway
+### Step 6: Test Multi-Tenant Gateway
+
+Test the endpoints with proper authentication:
 
 ```bash
-# Start the gateway server
-mclaw gateway-server --config-dir /etc/mclaw --port 42620 --host 0.0.0.0
-```
-
-Test the endpoints:
-```bash
-# Health check
+# Health check (no auth required)
 curl http://localhost:42620/health
 
-# List clients
-curl http://localhost:42620/api/v1/clients
+# List clients (no auth required)
+curl http://localhost:42620/api/v1/clients | jq .
 
-# Chat completion (for client1)
+# Chat completion WITH authentication
+# Use Bearer token with the client_secret
 curl -X POST http://localhost:42620/api/v1/chat \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer mc_client1_..." \
   -d '{
-    "client_id": "client1",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+Expected response:
+```json
+{
+  "content": "Hello! How can I help you today?",
+  "model": "anthropic/claude-sonnet-4.6"
+}
+```
+
+**Important**: The `/api/v1/chat` endpoint requires authentication via the `Authorization` header with the `client_secret` as a Bearer token.
 
 ---
 
@@ -355,7 +413,25 @@ curl -X POST http://ns3366383.ip-37-187-77.eu:42619/register \
 
 **IMPORTANT**: By default, clients use their own LLM provider configuration. To use the centralized Multi-Tenant Gateway instead, add this to the client's `/root/.mclaw/config.toml`:
 
-#### For client1 (local machine):
+**Quick Setup on Gateway Server (client1):**
+
+Since client1 runs on the same machine as the Multi-Tenant Gateway, you can configure it directly:
+
+```bash
+# On the gateway server (ns3366383.ip-37-187-77.eu)
+# Set mclaw as the default provider
+sed -i 's/^default_provider = "openrouter"/default_provider = "mclaw"/' /root/.mclaw/config.toml
+
+# Add the mclaw provider configuration
+# Edit /root/.mclaw/config.toml and add after [model_providers]:
+# [model_providers.mclaw]
+# type = "mclaw"
+# gateway_url = "http://127.0.0.1:42620"
+# client_id = "client1"
+# client_secret = "mc_client1_..."  # Your generated secret
+```
+
+#### Complete client1 config (local machine on gateway server):
 
 ```toml
 [dispatcher]
