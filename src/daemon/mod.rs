@@ -404,6 +404,7 @@ mod tests {
             draft_update_interval_ms: 1000,
             interrupt_on_new_message: false,
             mention_only: false,
+            machine_name: None,
         });
         assert!(has_supervised_channels(&config));
     }

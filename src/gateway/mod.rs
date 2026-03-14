@@ -610,6 +610,11 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
 
     crate::health::mark_component_ok("gateway");
 
+    // ── Dispatcher Registration ────────────────────────────────────────
+    // Note: Dispatcher client registration is handled via the hook system
+    // or can be done manually by calling the dispatcher's /register endpoint.
+    // See docs/dispatcher-guide.md for details.
+
     // Fire gateway start hook
     if let Some(ref hooks) = hooks {
         hooks.fire_gateway_start(host, actual_port).await;
@@ -704,12 +709,29 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         // ── SPA fallback: non-API GET requests serve index.html ──
         .fallback(get(static_files::handle_spa_fallback));
 
-    // Run the server
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await?;
+    // Run the server with graceful shutdown
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
+    // Spawn graceful shutdown handler
+    tokio::spawn(async move {
+        // Wait for Ctrl+C
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+
+        tracing::info!("Ctrl+C received, starting graceful shutdown...");
+
+        // Send shutdown signal
+        let _ = tx.send(());
+    });
+
+    // Run server with graceful shutdown
+    // Note: Dispatcher will automatically clean up stale machines via heartbeat timeout
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .with_graceful_shutdown(async {
+            rx.await.ok();
+        })
+        .await?;
 
     Ok(())
 }

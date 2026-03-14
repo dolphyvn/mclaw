@@ -482,6 +482,35 @@ Examples:
   mclaw list-clients")]
     ListClients,
 
+    /// Start the multi-machine dispatcher (routes Telegram commands to multiple MClaw instances)
+    #[command(long_about = "\
+Start the dispatcher service for multi-machine management.
+
+The dispatcher receives Telegram webhook updates and routes commands
+to multiple MClaw client instances based on @machine_name prefixes.
+
+Command syntax:
+  @machine_name command  - Route to specific machine
+  @all command           - Run on all machines
+  @list                  - List configured machines
+  command                - Run on default machine
+
+Examples:
+  mclaw dispatcher --config /etc/mclaw/dispatcher.toml")]
+    Dispatcher {
+        /// Path to dispatcher config file
+        #[arg(long, default_value = "/etc/mclaw/dispatcher.toml")]
+        config: String,
+
+        /// Port to listen on (overrides config)
+        #[arg(short, long)]
+        port: Option<u16>,
+
+        /// Host to bind to (overrides config)
+        #[arg(long)]
+        host: Option<String>,
+    },
+
     /// Generate shell completion script to stdout
     #[command(long_about = "\
 Generate shell completion scripts for `mclaw`.
@@ -1209,6 +1238,39 @@ async fn main() -> Result<()> {
             }
 
             Ok(())
+        },
+
+        Commands::Dispatcher { config, port, host } => {
+            // Load dispatcher config
+            let config_path = std::path::PathBuf::from(config);
+            let config_content = std::fs::read_to_string(&config_path)
+                .with_context(|| format!("Failed to read dispatcher config from {}", config_path.display()))?;
+
+            let mut dispatcher_config: toml::Value = toml::from_str(&config_content)
+                .with_context(|| format!("Failed to parse dispatcher config from {}", config_path.display()))?;
+
+            // Override with command line args if provided
+            if let Some(p) = port {
+                if let Some(server) = dispatcher_config.get_mut("server") {
+                    if let Some(port_val) = server.get_mut("port") {
+                        *port_val = toml::Value::Integer(p as i64);
+                    }
+                }
+            }
+            if let Some(h) = host {
+                if let Some(server) = dispatcher_config.get_mut("server") {
+                    if let Some(host_val) = server.get_mut("host") {
+                        *host_val = toml::Value::String(h);
+                    }
+                }
+            }
+
+            // Convert to our config struct using fully qualified path
+            let dispatcher_config: mclaw::dispatcher::config::ServiceConfig = serde_json::from_value(
+                serde_json::to_value(&dispatcher_config)?
+            )?;
+
+            mclaw::dispatcher::run_dispatcher(dispatcher_config).await
         },
     }
 }

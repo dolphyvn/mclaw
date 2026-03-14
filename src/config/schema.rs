@@ -226,6 +226,10 @@ pub struct Config {
     #[serde(default)]
     pub tts: TtsConfig,
 
+    /// Dispatcher configuration for multi-machine message routing (`[dispatcher]`).
+    #[serde(default)]
+    pub dispatcher: ClientDispatcherConfig,
+
     /// Multi-tenant gateway configuration (`[multi_tenant]`).
     #[serde(default)]
     pub multi_tenant: Option<crate::multi_tenant::config::MultiTenantConfig>,
@@ -578,6 +582,53 @@ pub struct EdgeTtsConfig {
     /// Path to the `edge-tts` binary (default `"edge-tts"`).
     #[serde(default = "default_edge_tts_binary_path")]
     pub binary_path: String,
+}
+
+/// Client dispatcher configuration (`[dispatcher]` section).
+///
+/// When enabled, this client registers with a dispatcher service for centralized
+/// message routing across multiple machines.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ClientDispatcherConfig {
+    /// Enable dispatcher mode. When true, the client registers with the dispatcher.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Machine name for dispatcher routing. If not set, uses hostname or Telegram machine_name.
+    #[serde(default)]
+    pub machine_name: Option<String>,
+    /// Dispatcher endpoint URL (e.g. `"http://dispatcher:42619"`).
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    /// Registration auth token. Must match dispatcher's bot_token for registration.
+    #[serde(default)]
+    pub auth_token: Option<String>,
+    /// Description for this machine in the dispatcher registry.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Whether this machine is the default machine for commands without @ prefix.
+    #[serde(default)]
+    pub default: bool,
+    /// Registration interval in seconds. How often to re-register with the dispatcher.
+    #[serde(default = "default_client_dispatcher_registration_interval_secs")]
+    pub registration_interval_secs: u64,
+}
+
+fn default_client_dispatcher_registration_interval_secs() -> u64 {
+    60
+}
+
+impl Default for ClientDispatcherConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            machine_name: None,
+            endpoint: None,
+            auth_token: None,
+            description: None,
+            default: false,
+            registration_interval_secs: default_client_dispatcher_registration_interval_secs(),
+        }
+    }
 }
 
 /// Agent orchestration configuration (`[agent]` section).
@@ -2913,7 +2964,8 @@ fn default_draft_update_interval_ms() -> u64 {
 /// Telegram bot channel configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TelegramConfig {
-    /// Telegram Bot API token (from @BotFather).
+    /// Telegram Bot API token (from @BotFather). Can be empty when using dispatcher mode.
+    #[serde(default)]
     pub bot_token: String,
     /// Allowed Telegram user IDs or usernames. Empty = deny all.
     pub allowed_users: Vec<String>,
@@ -2931,6 +2983,10 @@ pub struct TelegramConfig {
     /// Direct messages are always processed.
     #[serde(default)]
     pub mention_only: bool,
+    /// Machine name for dispatcher routing. When set, this client identifies itself
+    /// to the dispatcher with this name for message routing.
+    #[serde(default)]
+    pub machine_name: Option<String>,
 }
 
 impl ChannelConfig for TelegramConfig {
@@ -3800,6 +3856,7 @@ impl Default for Config {
             query_classification: QueryClassificationConfig::default(),
             transcription: TranscriptionConfig::default(),
             tts: TtsConfig::default(),
+            dispatcher: ClientDispatcherConfig::default(),
             multi_tenant: None,
         }
     }
@@ -5350,6 +5407,7 @@ default_temperature = 0.7
                     draft_update_interval_ms: default_draft_update_interval_ms(),
                     interrupt_on_new_message: false,
                     mention_only: false,
+                    machine_name: None,
                 }),
                 discord: None,
                 slack: None,
@@ -5393,6 +5451,7 @@ default_temperature = 0.7
             hardware: HardwareConfig::default(),
             transcription: TranscriptionConfig::default(),
             tts: TtsConfig::default(),
+            dispatcher: ClientDispatcherConfig::default(),
             multi_tenant: None,
         };
 
@@ -5725,6 +5784,7 @@ tool_dispatcher = "xml"
             draft_update_interval_ms: 500,
             interrupt_on_new_message: true,
             mention_only: false,
+            machine_name: Some("client1".into()),
         };
         let json = serde_json::to_string(&tc).unwrap();
         let parsed: TelegramConfig = serde_json::from_str(&json).unwrap();
@@ -5733,6 +5793,7 @@ tool_dispatcher = "xml"
         assert_eq!(parsed.stream_mode, StreamMode::Partial);
         assert_eq!(parsed.draft_update_interval_ms, 500);
         assert!(parsed.interrupt_on_new_message);
+        assert_eq!(parsed.machine_name, Some("client1".to_string()));
     }
 
     #[test]
@@ -5742,6 +5803,15 @@ tool_dispatcher = "xml"
         assert_eq!(parsed.stream_mode, StreamMode::Off);
         assert_eq!(parsed.draft_update_interval_ms, 1000);
         assert!(!parsed.interrupt_on_new_message);
+        assert!(parsed.machine_name.is_none());
+    }
+
+    #[test]
+    async fn telegram_config_empty_bot_token() {
+        let json = r#"{"bot_token":"","allowed_users":["@user"]}"#;
+        let parsed: TelegramConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.bot_token, "");
+        assert_eq!(parsed.allowed_users.len(), 1);
     }
 
     #[test]

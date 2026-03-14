@@ -1,0 +1,19 @@
+[Unit]
+Description=MClaw Dispatcher - Multi-machine Telegram bot router
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+Environment="RUST_LOG=info"
+ExecStart=/usr/local/bin/mclaw dispatcher --config /etc/mclaw/dispatcher.toml
+Restart=on-failure
+RestartSec=10s
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

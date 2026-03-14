@@ -1,0 +1,23 @@
+# MClaw Machines Registry
+# Each machine runs a MClaw client instance
+
+# Client 1 - Current machine (local machine)
+[[machines]]
+name = "client1"
+url = "http://localhost:42618"
+default = true
+description = "Local development machine"
+
+# Client 2 - Remote machine
+[[machines]]
+name = "client2"
+url = "http://51.255.93.22:42618"
+default = false
+description = "Remote production server"
+
+# Add more machines as needed:
+# [[machines]]
+# name = "client3"
+# url = "http://192.168.1.100:42618"
+# default = false
+# description = "Raspberry Pi"

@@ -1,0 +1,18 @@
+# MClaw Dispatcher Service Configuration
+# This service routes Telegram commands to multiple MClaw instances
+
+[server]
+host = "0.0.0.0"
+port = 42619
+
+[telegram]
+bot_token = "8341625895:AAGV6hZi0NWWwSuNg2pL1q5Z9ClyK1f3feE"
+webhook_url = ""  # Set this after deployment
+allowed_users = ["@POs3id0nn"]
+
+[machines]
+path = "/etc/mclaw/machines.toml"
+
+[logging]
+level = "info"
+# file = "/var/log/mclaw/dispatcher.log"

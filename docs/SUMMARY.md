@@ -49,6 +49,8 @@ Last refreshed: **February 18, 2026**.
 - [release-process.md](contributing/release-process.md)
 - [troubleshooting.md](ops/troubleshooting.md)
 - [network-deployment.md](ops/network-deployment.md)
+- [dispatcher-guide.md](dispatcher-guide.md) — Multi-machine dispatcher documentation
+- [multi-machine-setup.md](multi-machine-setup.md) — Multi-machine cluster tutorial
 - [mattermost-setup.md](setup-guides/mattermost-setup.md)
 
 ### 4) Security Design & Proposals

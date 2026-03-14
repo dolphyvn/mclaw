@@ -17,6 +17,8 @@ Localized hubs: [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · 
 | Check config defaults and keys quickly | [config-reference.md](reference/api/config-reference.md) |
 | Configure custom providers/endpoints | [custom-providers.md](contributing/custom-providers.md) |
 | Configure Z.AI / GLM provider | [zai-glm-setup.md](setup-guides/zai-glm-setup.md) |
+| **Manage multiple machines with dispatcher** | **[dispatcher-guide.md](dispatcher-guide.md)** |
+| **Set up multi-machine cluster** | **[multi-machine-setup.md](multi-machine-setup.md)** |
 | Use LangGraph integration patterns | [langgraph-integration.md](contributing/langgraph-integration.md) |
 | Operate runtime (day-2 runbook) | [operations-runbook.md](ops/operations-runbook.md) |
 | Troubleshoot install/runtime/channel issues | [troubleshooting.md](ops/troubleshooting.md) |
@@ -52,6 +54,8 @@ Localized hubs: [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · 
 - [commands-reference.md](reference/cli/commands-reference.md) — command lookup by workflow
 - [providers-reference.md](reference/api/providers-reference.md) — provider IDs, aliases, credential env vars
 - [channels-reference.md](reference/api/channels-reference.md) — channel capabilities and setup paths
+- [dispatcher-guide.md](dispatcher-guide.md) — multi-machine dispatcher architecture and configuration
+- [multi-machine-setup.md](multi-machine-setup.md) — step-by-step multi-machine cluster tutorial
 - [matrix-e2ee-guide.md](security/matrix-e2ee-guide.md) — Matrix encrypted-room (E2EE) setup and no-response diagnostics
 - [config-reference.md](reference/api/config-reference.md) — high-signal config keys and secure defaults
 - [custom-providers.md](contributing/custom-providers.md) — custom provider/base URL integration templates

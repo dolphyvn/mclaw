@@ -2709,20 +2709,23 @@ fn collect_configured_channels(
 ) -> Vec<ConfiguredChannel> {
     let mut channels = Vec::new();
 
+    // Skip Telegram if bot_token is empty (dispatcher mode)
     if let Some(ref tg) = config.channels_config.telegram {
-        channels.push(ConfiguredChannel {
-            display_name: "Telegram",
-            channel: Arc::new(
-                TelegramChannel::new(
-                    tg.bot_token.clone(),
-                    tg.allowed_users.clone(),
-                    tg.mention_only,
-                )
-                .with_streaming(tg.stream_mode, tg.draft_update_interval_ms)
-                .with_transcription(config.transcription.clone())
-                .with_workspace_dir(config.workspace_dir.clone()),
-            ),
-        });
+        if !tg.bot_token.is_empty() {
+            channels.push(ConfiguredChannel {
+                display_name: "Telegram",
+                channel: Arc::new(
+                    TelegramChannel::new(
+                        tg.bot_token.clone(),
+                        tg.allowed_users.clone(),
+                        tg.mention_only,
+                    )
+                    .with_streaming(tg.stream_mode, tg.draft_update_interval_ms)
+                    .with_transcription(config.transcription.clone())
+                    .with_workspace_dir(config.workspace_dir.clone()),
+                ),
+            });
+        }
     }
 
     if let Some(ref dc) = config.channels_config.discord {

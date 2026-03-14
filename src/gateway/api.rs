@@ -86,6 +86,20 @@ pub async fn handle_api_status(
         channels.insert(channel.name().to_string(), serde_json::Value::Bool(present));
     }
 
+    // Get machine name from dispatcher config or Telegram config
+    let machine_name = config
+        .dispatcher
+        .machine_name
+        .as_ref()
+        .or_else(|| {
+            config
+                .channels_config
+                .telegram
+                .as_ref()
+                .and_then(|tg| tg.machine_name.as_ref())
+        })
+        .cloned();
+
     let body = serde_json::json!({
         "provider": config.default_provider,
         "model": state.model,
@@ -97,6 +111,8 @@ pub async fn handle_api_status(
         "paired": state.pairing.is_paired(),
         "channels": channels,
         "health": health,
+        "machine_name": machine_name,
+        "dispatcher_enabled": config.dispatcher.enabled,
     });
 
     Json(body).into_response()
