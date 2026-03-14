@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
-const SERVICE_LABEL: &str = "com.mclaw.daemon";
+const SERVICE_LABEL: &str = "com.zeroclaw.daemon";
 const WINDOWS_TASK_NAME: &str = "ZeroClaw Daemon";
 
 /// Supported init systems for service management
@@ -142,10 +142,10 @@ fn start_linux(init_system: InitSystem) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
-            run_checked(Command::new("systemctl").args(["--user", "start", "mclaw-daemon.service"]))?;
+            run_checked(Command::new("systemctl").args(["--user", "start", "zeroclaw.service"]))?;
         }
         InitSystem::Openrc => {
-            run_checked(Command::new("rc-service").args(["mclaw", "start"]))?;
+            run_checked(Command::new("rc-service").args(["zeroclaw", "start"]))?;
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -184,10 +184,10 @@ fn stop_linux(init_system: InitSystem) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             let _ =
-                run_checked(Command::new("systemctl").args(["--user", "stop", "mclaw-daemon.service"]));
+                run_checked(Command::new("systemctl").args(["--user", "stop", "zeroclaw.service"]));
         }
         InitSystem::Openrc => {
-            let _ = run_checked(Command::new("rc-service").args(["mclaw", "stop"]));
+            let _ = run_checked(Command::new("rc-service").args(["zeroclaw", "stop"]));
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -222,10 +222,10 @@ fn restart_linux(init_system: InitSystem) -> Result<()> {
     match init_system {
         InitSystem::Systemd => {
             run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]))?;
-            run_checked(Command::new("systemctl").args(["--user", "restart", "mclaw-daemon.service"]))?;
+            run_checked(Command::new("systemctl").args(["--user", "restart", "zeroclaw.service"]))?;
         }
         InitSystem::Openrc => {
-            run_checked(Command::new("rc-service").args(["mclaw", "restart"]))?;
+            run_checked(Command::new("rc-service").args(["zeroclaw", "restart"]))?;
         }
         InitSystem::Auto => unreachable!("Auto should be resolved before this point"),
     }
@@ -288,14 +288,14 @@ fn status_linux(config: &Config, init_system: InitSystem) -> Result<()> {
             let out = run_capture(Command::new("systemctl").args([
                 "--user",
                 "is-active",
-                "mclaw-daemon.service",
+                "zeroclaw.service",
             ]))
             .unwrap_or_else(|_| "unknown".into());
             println!("Service state: {}", out.trim());
             println!("Unit: {}", linux_service_file(config)?.display());
         }
         InitSystem::Openrc => {
-            let out = run_capture(Command::new("rc-service").args(["mclaw", "status"]))
+            let out = run_capture(Command::new("rc-service").args(["zeroclaw", "status"]))
                 .unwrap_or_else(|_| "unknown".into());
             println!("Service state: {}", out.trim());
             println!("Unit: /etc/init.d/zeroclaw");
@@ -358,7 +358,7 @@ fn uninstall_linux(config: &Config, init_system: InitSystem) -> Result<()> {
             let init_script = Path::new("/etc/init.d/zeroclaw");
             if init_script.exists() {
                 if let Err(err) =
-                    run_checked(Command::new("rc-update").args(["del", "mclaw", "default"]))
+                    run_checked(Command::new("rc-update").args(["del", "zeroclaw", "default"]))
                 {
                     eprintln!(
                         "⚠️  Warning: Could not remove zeroclaw from OpenRC default runlevel: {err}"
@@ -448,7 +448,7 @@ fn install_linux_systemd(config: &Config) -> Result<()> {
 
     fs::write(&file, unit)?;
     let _ = run_checked(Command::new("systemctl").args(["--user", "daemon-reload"]));
-    let _ = run_checked(Command::new("systemctl").args(["--user", "enable", "mclaw-daemon.service"]));
+    let _ = run_checked(Command::new("systemctl").args(["--user", "enable", "zeroclaw.service"]));
     println!("✅ Installed systemd user service: {}", file.display());
     println!("   Start with: zeroclaw service start");
     Ok(())
@@ -469,7 +469,7 @@ fn is_root() -> bool {
 /// Returns Ok if user doesn't exist (OpenRC will handle creation or fail gracefully).
 /// Returns error if user exists but has unexpected properties.
 fn check_zeroclaw_user() -> Result<()> {
-    let output = Command::new("getent").args(["passwd", "mclaw"]).output();
+    let output = Command::new("getent").args(["passwd", "zeroclaw"]).output();
     let is_alpine = Path::new("/etc/alpine-release").exists();
 
     let (del_cmd, add_cmd) = if is_alpine {
@@ -509,9 +509,9 @@ fn check_zeroclaw_user() -> Result<()> {
                     );
                 }
 
-                if home != "/var/lib/mclaw" && home != "/nonexistent" {
+                if home != "/var/lib/zeroclaw" && home != "/nonexistent" {
                     eprintln!(
-                        "⚠️  Warning: zeroclaw user has home directory '{}' (expected /var/lib/mclaw or /nonexistent)",
+                        "⚠️  Warning: zeroclaw user has home directory '{}' (expected /var/lib/zeroclaw or /nonexistent)",
                         home
                     );
                 }
@@ -525,7 +525,7 @@ fn check_zeroclaw_user() -> Result<()> {
 }
 
 fn ensure_zeroclaw_user() -> Result<()> {
-    let output = Command::new("getent").args(["passwd", "mclaw"]).output();
+    let output = Command::new("getent").args(["passwd", "zeroclaw"]).output();
     if let Ok(output) = output {
         if output.status.success() {
             return check_zeroclaw_user();
@@ -535,12 +535,12 @@ fn ensure_zeroclaw_user() -> Result<()> {
     let is_alpine = Path::new("/etc/alpine-release").exists();
 
     if is_alpine {
-        let group_output = Command::new("getent").args(["group", "mclaw"]).output();
+        let group_output = Command::new("getent").args(["group", "zeroclaw"]).output();
         let group_exists = group_output.map(|o| o.status.success()).unwrap_or(false);
 
         if !group_exists {
             let output = Command::new("addgroup")
-                .args(["-S", "mclaw"])
+                .args(["-S", "zeroclaw"])
                 .output()
                 .context("Failed to create zeroclaw group")?;
 
@@ -559,8 +559,8 @@ fn ensure_zeroclaw_user() -> Result<()> {
                 "-H",
                 "-D",
                 "-G",
-                "mclaw",
-                "mclaw",
+                "zeroclaw",
+                "zeroclaw",
             ])
             .output()
             .context("Failed to create zeroclaw user")?;
@@ -571,7 +571,7 @@ fn ensure_zeroclaw_user() -> Result<()> {
         }
     } else {
         let output = Command::new("useradd")
-            .args(["-r", "-s", "/sbin/nologin", "mclaw"])
+            .args(["-r", "-s", "/sbin/nologin", "zeroclaw"])
             .output()
             .context("Failed to create zeroclaw user")?;
 
@@ -581,22 +581,22 @@ fn ensure_zeroclaw_user() -> Result<()> {
         }
     }
 
-    println!("✅ Created system user mclaw");
+    println!("✅ Created system user: zeroclaw");
     Ok(())
 }
 
-/// Change ownership of a path to mclaw:mclaw
+/// Change ownership of a path to zeroclaw:zeroclaw
 #[cfg(unix)]
 fn chown_to_zeroclaw(path: &Path) -> Result<()> {
     let output = Command::new("chown")
-        .args(["mclaw:mclaw", &path.to_string_lossy()])
+        .args(["zeroclaw:zeroclaw", &path.to_string_lossy()])
         .output()
         .context("Failed to run chown")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         bail!(
-            "Failed to change ownership of {} to mclaw:mclaw: {}",
+            "Failed to change ownership of {} to zeroclaw:zeroclaw: {}",
             path.display(),
             stderr.trim(),
         );
@@ -612,14 +612,14 @@ fn chown_to_zeroclaw(_path: &Path) -> Result<()> {
 #[cfg(unix)]
 fn chown_recursive_to_zeroclaw(path: &Path) -> Result<()> {
     let output = Command::new("chown")
-        .args(["-R", "mclaw:mclaw", &path.to_string_lossy()])
+        .args(["-R", "zeroclaw:zeroclaw", &path.to_string_lossy()])
         .output()
         .context("Failed to run recursive chown")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         bail!(
-            "Failed to recursively change ownership of {} to mclaw:mclaw: {}",
+            "Failed to recursively change ownership of {} to zeroclaw:zeroclaw: {}",
             path.display(),
             stderr.trim(),
         );
@@ -731,7 +731,7 @@ fn build_openrc_writability_probe_command(path: &Path, has_runuser: bool) -> (St
             "runuser".to_string(),
             vec![
                 "-u".to_string(),
-                "mclaw".to_string(),
+                "zeroclaw".to_string(),
                 "--".to_string(),
                 "sh".to_string(),
                 "-c".to_string(),
@@ -746,7 +746,7 @@ fn build_openrc_writability_probe_command(path: &Path, has_runuser: bool) -> (St
                 "/bin/sh".to_string(),
                 "-c".to_string(),
                 probe,
-                "mclaw".to_string(),
+                "zeroclaw".to_string(),
             ],
         )
     }
@@ -775,7 +775,7 @@ fn ensure_openrc_runtime_path_writable(path: &Path) -> Result<()> {
         };
         bail!(
             "OpenRC runtime user 'zeroclaw' cannot write {} ({details}). \
-             Re-run `sudo zeroclaw service install` and ensure ownership is mclaw:mclaw.",
+             Re-run `sudo zeroclaw service install` and ensure ownership is zeroclaw:zeroclaw.",
             path.display(),
         );
     }
@@ -811,7 +811,7 @@ fn warn_if_binary_in_home(exe_path: &Path) {
         eprintln!(
             "⚠️  Warning: Binary path '{}' appears to be in a user home directory.\n\
              For system-wide OpenRC service, consider installing to /usr/local/bin:\n\
-             sudo cp '{}' /opt/works/personal/github/mclaw/target/debug/mclaw",
+             sudo cp '{}' /usr/local/bin/zeroclaw",
             exe_path.display(),
             exe_path.display()
         );
@@ -823,17 +823,17 @@ fn generate_openrc_script(exe_path: &Path, config_dir: &Path) -> String {
     format!(
         r#"#!/sbin/openrc-run
 
-name="mclaw"
+name="zeroclaw"
 description="ZeroClaw daemon"
 
 command="{}"
 command_args="--config-dir {} daemon"
 command_background="yes"
-command_user="mclaw:mclaw"
+command_user="zeroclaw:zeroclaw"
 pidfile="/run/${{RC_SVCNAME}}.pid"
 umask 027
-output_log="/var/log/mclaw/access.log"
-error_log="/var/log/mclaw/error.log"
+output_log="/var/log/zeroclaw/access.log"
+error_log="/var/log/zeroclaw/error.log"
 
 depend() {{
     need net
@@ -846,7 +846,7 @@ depend() {{
 }
 
 fn resolve_openrc_executable() -> Result<PathBuf> {
-    let preferred = Path::new("/opt/works/personal/github/mclaw/target/debug/mclaw");
+    let preferred = Path::new("/usr/local/bin/zeroclaw");
     if preferred.exists() {
         return Ok(preferred.to_path_buf());
     }
@@ -868,9 +868,9 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
     let exe = resolve_openrc_executable()?;
     warn_if_binary_in_home(&exe);
 
-    let config_dir = Path::new("/etc/mclaw");
+    let config_dir = Path::new("/etc/zeroclaw");
     let workspace_dir = config_dir.join("workspace");
-    let log_dir = Path::new("/var/log/mclaw");
+    let log_dir = Path::new("/var/log/zeroclaw");
 
     if !config_dir.exists() {
         fs::create_dir_all(config_dir)
@@ -899,7 +899,7 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
         }
         chown_to_zeroclaw(&workspace_dir)?;
         println!(
-            "✅ Created directory: {} (owned by mclaw:mclaw)",
+            "✅ Created directory: {} (owned by zeroclaw:zeroclaw)",
             workspace_dir.display()
         );
     }
@@ -950,7 +950,7 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
 
     if created_log_dir {
         println!(
-            "✅ Created directory: {} (owned by mclaw:mclaw)",
+            "✅ Created directory: {} (owned by zeroclaw:zeroclaw)",
             log_dir.display()
         );
     }
@@ -967,9 +967,9 @@ fn install_linux_openrc(config: &Config) -> Result<()> {
             .with_context(|| format!("Failed to set permissions on {}", init_path.display()))?;
     }
 
-    run_checked(Command::new("rc-update").args(["add", "mclaw", "default"]))?;
+    run_checked(Command::new("rc-update").args(["add", "zeroclaw", "default"]))?;
     println!("✅ Installed OpenRC service: /etc/init.d/zeroclaw");
-    println!("   Config path: /etc/mclaw/config.toml");
+    println!("   Config path: /etc/zeroclaw/config.toml");
     println!("   Start with: sudo zeroclaw service start");
     let _ = config;
     Ok(())
@@ -1043,7 +1043,7 @@ fn linux_service_file(config: &Config) -> Result<PathBuf> {
         .join(".config")
         .join("systemd")
         .join("user")
-        .join("mclaw-daemon.service"))
+        .join("zeroclaw.service"))
 }
 
 fn run_checked(command: &mut Command) -> Result<()> {
@@ -1111,7 +1111,7 @@ mod tests {
     fn linux_service_file_has_expected_suffix() {
         let file = linux_service_file(&Config::default()).unwrap();
         let path = file.to_string_lossy();
-        assert!(path.ends_with(".config/systemd/user/mclaw-daemon.service"));
+        assert!(path.ends_with(".config/systemd/user/zeroclaw.service"));
     }
 
     #[test]
@@ -1175,22 +1175,22 @@ mod tests {
     fn generate_openrc_script_contains_required_directives() {
         use std::path::PathBuf;
 
-        let exe_path = PathBuf::from("/opt/works/personal/github/mclaw/target/debug/mclaw");
-        let script = generate_openrc_script(&exe_path, Path::new("/etc/mclaw"));
+        let exe_path = PathBuf::from("/usr/local/bin/zeroclaw");
+        let script = generate_openrc_script(&exe_path, Path::new("/etc/zeroclaw"));
 
         assert!(script.starts_with("#!/sbin/openrc-run"));
         assert!(script.contains("name=\"zeroclaw\""));
         assert!(script.contains("description=\"ZeroClaw daemon\""));
-        assert!(script.contains("command=\"/opt/works/personal/github/mclaw/target/debug/mclaw\""));
-        assert!(script.contains("command_args=\"--config-dir /etc/mclaw daemon\""));
+        assert!(script.contains("command=\"/usr/local/bin/zeroclaw\""));
+        assert!(script.contains("command_args=\"--config-dir /etc/zeroclaw daemon\""));
         assert!(!script.contains("env ZEROCLAW_CONFIG_DIR"));
         assert!(!script.contains("env ZEROCLAW_WORKSPACE"));
         assert!(script.contains("command_background=\"yes\""));
-        assert!(script.contains("command_user=\"mclaw:mclaw\""));
+        assert!(script.contains("command_user=\"zeroclaw:zeroclaw\""));
         assert!(script.contains("pidfile=\"/run/${RC_SVCNAME}.pid\""));
         assert!(script.contains("umask 027"));
-        assert!(script.contains("output_log=\"/var/log/mclaw/access.log\""));
-        assert!(script.contains("error_log=\"/var/log/mclaw/error.log\""));
+        assert!(script.contains("output_log=\"/var/log/zeroclaw/access.log\""));
+        assert!(script.contains("error_log=\"/var/log/zeroclaw/error.log\""));
         assert!(script.contains("depend()"));
         assert!(script.contains("need net"));
         assert!(script.contains("after firewall"));
@@ -1207,7 +1207,7 @@ mod tests {
         let cargo_path = PathBuf::from("/home/user/.cargo/bin/zeroclaw");
         assert!(cargo_path.to_string_lossy().contains(".cargo/bin"));
 
-        let system_path = PathBuf::from("/opt/works/personal/github/mclaw/target/debug/mclaw");
+        let system_path = PathBuf::from("/usr/local/bin/zeroclaw");
         assert!(!system_path.to_string_lossy().contains("/home/"));
         assert!(!system_path.to_string_lossy().contains(".cargo/bin"));
     }
@@ -1225,17 +1225,17 @@ mod tests {
     #[test]
     fn openrc_writability_probe_prefers_runuser_when_available() {
         let (program, args) =
-            build_openrc_writability_probe_command(Path::new("/etc/mclaw"), true);
+            build_openrc_writability_probe_command(Path::new("/etc/zeroclaw"), true);
         assert_eq!(program, "runuser");
         assert_eq!(
             args,
             vec![
                 "-u".to_string(),
-                "mclaw".to_string(),
+                "zeroclaw".to_string(),
                 "--".to_string(),
                 "sh".to_string(),
                 "-c".to_string(),
-                "test -w '/etc/mclaw'".to_string()
+                "test -w '/etc/zeroclaw'".to_string()
             ]
         );
     }
@@ -1244,7 +1244,7 @@ mod tests {
     #[test]
     fn openrc_writability_probe_falls_back_to_su() {
         let (program, args) =
-            build_openrc_writability_probe_command(Path::new("/etc/mclaw/workspace"), false);
+            build_openrc_writability_probe_command(Path::new("/etc/zeroclaw/workspace"), false);
         assert_eq!(program, "su");
         assert_eq!(
             args,
@@ -1252,8 +1252,8 @@ mod tests {
                 "-s".to_string(),
                 "/bin/sh".to_string(),
                 "-c".to_string(),
-                "test -w '/etc/mclaw/workspace'".to_string(),
-                "mclaw".to_string()
+                "test -w '/etc/zeroclaw/workspace'".to_string(),
+                "zeroclaw".to_string()
             ]
         );
     }
