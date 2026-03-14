@@ -1,54 +1,87 @@
 # MClaw - Multi-Tenant AI Agent Runtime
 
-**MClaw** is a multi-tenant fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw) with centralized LLM gateway capabilities.
+**MClaw** is a multi-tenant fork of [ZeroClaw](https://github.com/zeroclaw-labs/zeroclaw) with centralized LLM gateway and multi-machine dispatcher capabilities.
 
 ## What is MClaw?
 
-MClaw is a Rust-first autonomous agent runtime that adds **multi-tenant LLM gateway** functionality to ZeroClaw. It allows you to:
+MClaw is a Rust-first autonomous agent runtime that adds **multi-machine management** and **multi-tenant LLM gateway** functionality to ZeroClaw. It allows you to:
 
+- **Manage multiple machines** from a single Telegram bot interface
 - **Centralize LLM API keys** on one secure gateway server
 - **Route requests by client identity** - different groups use different providers
-- **Run multiple agent machines** without duplicating API keys on each machine
+- **Run distributed agent workloads** across multiple servers
 
 ### Key Features
 
 - **All ZeroClaw features**: Agent orchestration, channels (Telegram, Discord, Slack, etc.), tools, memory, cron, hardware peripherals
+- **Multi-Machine Dispatcher**: Route commands to multiple MClaw instances via Telegram
+- **Dynamic machine registration**: Clients auto-register and send heartbeats
 - **Multi-tenant LLM gateway**: Centralize LLM API keys and route requests by client identity
 - **Client authentication**: Secure Bearer token or Basic auth per client group
 - **Provider routing**: Different groups use different LLM providers (OpenRouter, OpenAI, Anthropic, GLM, Ollama, etc.)
 
-## Architecture
+## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    MClaw Gateway Server                     │
-│  (One instance holds all LLM API keys)                      │
-│  Port: 42618                                                │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-     ┌─────────────────────┼─────────────────────┐
-     ▼                     ▼                     ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  Group A        │ │  Group B        │ │  Group C        │
-│  OpenRouter     │ │  ChatGPT        │ │  GLM            │
-└────────┬────────┘ └────────┬────────┘ └────────┬────────┘
-         │                   │                   │
-   ┌─────┴─────┐       ┌─────┴─────┐       ┌─────┴─────┐
-   │ MClaw     │       │ MClaw     │       │ MClaw     │
-   │ Daemon    │       │ Daemon    │       │ Daemon    │
-   │ (full     │       │ (full     │       │ (full     │
-   │  agent)   │       │  agent)   │       │  agent)   │
-   └───────────┘       └───────────┘       └───────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                         MClaw Complete Architecture                       │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐ │
+│  │                      Telegram Bot Interface                         │ │
+│  │                    (@your_bot commands)                             │ │
+│  └───────────────────────────────┬─────────────────────────────────────┘ │
+│                                  │                                        │
+│  ┌───────────────────────────────▼─────────────────────────────────────┐ │
+│  │                     MClaw Dispatcher (Port 42619)                   │ │
+│  │  • Routes @machine commands to registered clients                  │ │
+│  │  • Dynamic machine registration & heartbeat monitoring             │ │
+│  │  • WebSocket connections to MClaw gateways                         │ │
+│  └───────────────┬─────────────────────────────────┬───────────────────┘ │
+│                  │                                 │                      │
+│         ┌────────▼────────┐              ┌────────▼────────┐             │
+│         │  Machine:       │              │  Machine:       │             │
+│         │  client1        │              │  client2        │             │
+│         │  (localhost)    │              │  (remote)       │             │
+│         │  Port: 42618    │              │  Port: 42618    │             │
+│         └────────┬────────┘              └────────┬────────┘             │
+│                  │                                 │                      │
+│  ┌───────────────▼─────────────────────────────────▼───────────────────┐ │
+│  │              Multi-Tenant Gateway (Port 42620)                      │ │
+│  │  • Centralized LLM API management                                   │ │
+│  │  • Client authentication & rate limiting                            │ │
+│  │  • Provider routing (OpenRouter, OpenAI, GLM, etc.)                │ │
+│  └───────────────────────────┬───────────────────────────────────────┘ │
+│                              │                                            │
+│         ┌────────────────────┼────────────────────┐                      │
+│         ▼                    ▼                    ▼                      │
+│  ┌──────────┐         ┌──────────┐         ┌──────────┐                 │
+│  │ Group A  │         │ Group B  │         │ Group C  │                 │
+│  │OpenRouter│         │ ChatGPT  │         │   GLM    │                 │
+│  └──────────┘         └──────────┘         └──────────┘                 │
+│                                                                          │
+│  Access via: https://ml.ovh139.aliases.me (Nginx HTTPS Reverse Proxy)    │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Component Comparison
+
+| Component | Port | Purpose |
+|-----------|------|---------|
+| **Dispatcher** | 42619 | Routes Telegram commands to multiple machines |
+| **Gateway** | 42618 | Executes commands on a single machine |
+| **Multi-Tenant Gateway** | 42620 | Centralized LLM API for multiple clients |
 
 ## Complete Setup Guide
 
-This guide walks you through setting up MClaw from scratch, including:
+This guide walks you through setting up the complete MClaw infrastructure from scratch, including:
 
 1. Building MClaw
-2. Setting up the gateway server
-3. Configuring client groups
-4. Connecting client machines
+2. Setting up the Dispatcher (multi-machine management)
+3. Setting up the Multi-Tenant Gateway (centralized LLM API)
+4. Configuring client machines
+5. Setting up Nginx with HTTPS
+6. Running as systemd services
 
 ---
 
@@ -58,6 +91,7 @@ This guide walks you through setting up MClaw from scratch, including:
 
 - Rust 1.70+ (install via [rustup](https://rustup.rs/))
 - Git
+- Linux server (Ubuntu/Debian recommended)
 
 ### Build from source
 
@@ -66,261 +100,638 @@ This guide walks you through setting up MClaw from scratch, including:
 git clone https://github.com/dolphyvn/mclaw.git
 cd mclaw
 
-# Build (use cargo build for development, cargo build --release for production)
-cargo build
+# Build release binary
+cargo build --release
 
-# The binary will be at: ./target/debug/mclaw
+# The binary will be at: ./target/release/mclaw
+sudo cp target/release/mclaw /usr/local/bin/mclaw
+sudo chmod +x /usr/local/bin/mclaw
 ```
 
 ---
 
-## Part 2: Gateway Server Setup
+## Part 2: Dispatcher Setup (Multi-Machine Management)
 
-The gateway server is the central component that holds all LLM API keys and routes requests.
+The Dispatcher allows you to manage multiple MClaw machines from a single Telegram bot.
+
+### Step 1: Create Telegram Bot
+
+1. Open Telegram and search for `@BotFather`
+2. Send `/newbot` and follow the prompts
+3. Save the bot token (format: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+4. Note your Telegram username for authorization
+
+### Step 2: Configure Dispatcher
+
+Create `/etc/mclaw/dispatcher.toml`:
+
+```toml
+[server]
+host = "127.0.0.1"
+port = 42619
+
+[telegram]
+bot_token = "YOUR_BOT_TOKEN_HERE"
+allowed_users = ["@YOUR_TELEGRAM_USERNAME"]
+webhook_url = ""  # Set later after nginx is configured
+
+[machines]
+path = "/etc/mclaw/machines.toml"
+```
+
+Create `/etc/mclaw/machines.toml`:
+
+```toml
+# Static machine configurations
+# Machines can also register dynamically via /register endpoint
+
+[[machines]]
+name = "client1"
+url = "http://localhost:42618"
+default = true
+description = "Local gateway machine"
+```
+
+### Step 3: Start Dispatcher (for testing)
+
+```bash
+# Create config directory
+sudo mkdir -p /etc/mclaw
+
+# Test run
+/usr/local/bin/mclaw dispatcher --config /etc/mclaw/dispatcher.toml
+```
+
+---
+
+## Part 3: Multi-Tenant Gateway Setup
+
+The Multi-Tenant Gateway centralizes all LLM API keys.
 
 ### Step 1: Generate Client Secrets
 
-For each client group, generate a unique secret:
-
 ```bash
-# Generate secret for Group A
-./target/debug/mclaw generate-secret group-a
-
-# Output example:
-# Client ID: group-a
-# Client Secret: mc_group-a_1a2b3c4d5e6f...
+# Generate secret for each client group
+mclaw generate-secret client1
+mclaw generate-secret client2
+mclaw generate-secret group-a
+mclaw generate-secret group-b
 ```
 
-Repeat for each group you need:
-```bash
-./target/debug/mclaw generate-secret group-b
-./target/debug/mclaw generate-secret group-c
-```
+### Step 2: Configure Gateway
 
-### Step 2: Configure the Gateway
-
-Create or edit `~/.mclaw/config.toml`:
+Create `/etc/mclaw/multi_tenant.toml`:
 
 ```toml
-[multi_tenant]
-enabled = true
-host = "0.0.0.0"   # Bind to all interfaces (use 127.0.0.1 for local only)
-port = 42618
-
-# Group A - Uses OpenRouter
-[multi_tenant.groups.group-a]
-client_id = "group-a"
-client_secret = "mc_group-a_1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3"
+# Client 1 - Uses OpenRouter
+[[groups]]
+client_id = "client1"
+client_secret = "mc_client1_..."  # From generate-secret output
 provider = "openrouter"
-model = "anthropic/claude-sonnet-4-20250514"
-api_key = "sk-or-v1-your-openrouter-api-key"
-temperature = 0.7
-max_tokens = 4096
-rate_limit = 60
+model = "anthropic/claude-sonnet-4.6"
+api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
 
-# Group B - Uses OpenAI/ChatGPT
-[multi_tenant.groups.group-b]
+# Client 2 - Uses OpenRouter
+[[groups]]
+client_id = "client2"
+client_secret = "mc_client2_..."
+provider = "openrouter"
+model = "anthropic/claude-sonnet-4.6"
+api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
+
+# Group A - Free model
+[[groups]]
+client_id = "group-a"
+client_secret = "mc_group-a_..."
+provider = "openrouter"
+model = "nvidia/nemotron-3-nano-30b-a3b:free"
+api_key = "sk-or-v1-YOUR_OPENROUTER_KEY"
+
+# Group B - OpenAI
+[[groups]]
 client_id = "group-b"
-client_secret = "mc_group-b_9z8y7x6w5v4u3t2s1r0q9p8o7n6m5l4k3j2i1h0g9f8e7d6c5b4a3z2y1x0w9v8u7"
+client_secret = "mc_group-b_..."
 provider = "openai"
 model = "gpt-4o"
-api_key = "sk-proj-your-openai-api-key"
-temperature = 0.7
+api_key = "sk-proj-YOUR_OPENAI_KEY"
 
-# Group C - Uses GLM (Zhipu AI)
-[multi_tenant.groups.group-c]
+# Group C - GLM
+[[groups]]
 client_id = "group-c"
-client_secret = "mc_group-c_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+client_secret = "mc_group-c_..."
 provider = "glm"
 model = "glm-4"
-api_key = "your-id.secret"  # GLM uses format: id.secret
+api_key = "your-id.secret"
 
-# Group D - Uses Ollama (local)
-[multi_tenant.groups.group-d]
-client_id = "group-d"
-client_secret = "mc_group-d_f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3"
-provider = "ollama"
-model = "llama3.2"
-api_url = "http://localhost:11434"  # Ollama local endpoint
-api_key = ""  # Ollama doesn't need API key
-```
-
----
-
-### Using ChatGPT Plus Subscription (OAuth)
-
-MClaw supports using your ChatGPT Plus subscription via OAuth authentication instead of API keys.
-
-#### Step 1: Login with OpenAI OAuth (on gateway server)
-
-```bash
-# Run this ON THE GATEWAY SERVER machine
-./target/debug/mclaw auth login openai --profile chatgpt-plus
-```
-
-Follow the prompts to log in with your OpenAI/ChatGPT account. This will store OAuth tokens that the gateway can use.
-
-#### Step 2: Configure group to use OAuth
-
-```toml
-# Group using ChatGPT Plus subscription (OAuth)
-[multi_tenant.groups.chatgpt-plus]
+# ChatGPT Plus (OAuth)
+[[groups]]
 client_id = "chatgpt-plus"
 client_secret = "mc_chatgpt-plus_..."
-provider = "openai-codex"  # Uses OAuth
+provider = "openai-codex"
 model = "gpt-4o"
-auth_profile = "chatgpt-plus"  # Must match the profile from 'mclaw auth login'
-# api_key not needed when using auth_profile
+auth_profile = "chatgpt-plus"
 ```
 
-**Supported OAuth providers:**
-- `openai-codex` / `codex` - OpenAI/ChatGPT OAuth (uses your chatgpt.com account)
-- `gemini-oauth` / `gemini_oauth` - Google Gemini OAuth
-
----
-
-### Step 3: List Configured Clients
-
-Verify your configuration:
+### Step 3: Setup OAuth for ChatGPT Plus (Optional)
 
 ```bash
-./target/debug/mclaw list-clients
+# Login to OpenAI OAuth on the gateway server
+mclaw auth login openai --profile chatgpt-plus
 ```
 
-Output example:
-```
-Configured Clients:
+Follow the browser prompts to authenticate with your ChatGPT account.
 
-  [group-a]
-    Provider: openrouter
-    Model: anthropic/claude-sonnet-4-20250514
-    Secret: mc_group-a_1a2b3c4d...
-
-  [group-b]
-    Provider: openai
-    Model: gpt-4o
-    Secret: mc_group-b_9z8y7x6w...
-```
-
-### Step 4: Start the Gateway Server
+### Step 4: Test Multi-Tenant Gateway
 
 ```bash
-# Use defaults from config.toml
-./target/debug/mclaw gateway-server
-
-# Or override port/host
-./target/debug/mclaw gateway-server --port 8080 --host 0.0.0.0
+# Start the gateway server
+mclaw gateway-server --config-dir /etc/mclaw --port 42620 --host 0.0.0.0
 ```
 
-You'll see:
-```
-🧠 MClaw Multi-Tenant Gateway
-   Host: 0.0.0.0
-   Port: 42618
-   Health: http://0.0.0.0:42618/health
-   Chat API: http://0.0.0.0:42618/api/v1/chat
-
-   Configured clients: 3
-     - group-a -> openrouter (anthropic/claude-sonnet-4-20250514)
-     - group-b -> openai (gpt-4o)
-     - group-c -> glm (glm-4)
-
-   Ctrl+C to stop
-```
-
----
-
-## Part 3: Gateway API Reference
-
-Once the gateway is running, it exposes these endpoints:
-
-### Health Check
-
+Test the endpoints:
 ```bash
-curl http://localhost:42618/health
-```
+# Health check
+curl http://localhost:42620/health
 
-Response:
-```json
-{
-  "status": "ok",
-  "service": "mclaw-gateway",
-  "version": "0.1.0"
-}
-```
+# List clients
+curl http://localhost:42620/api/v1/clients
 
-### Chat Completion
-
-```bash
-curl -X POST http://localhost:42618/api/v1/chat \
-  -H "Authorization: Bearer mc_group-a_1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3" \
+# Chat completion (for client1)
+curl -X POST http://localhost:42620/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [
-      {"role": "user", "content": "Hello! Can you help me?"}
-    ],
-    "temperature": 0.7
+    "client_id": "client1",
+    "messages": [{"role": "user", "content": "Hello!"}]
   }'
-```
-
-Response:
-```json
-{
-  "content": "Hello! I'd be happy to help you. What would you like to know?",
-  "model": "anthropic/claude-sonnet-4-20250514"
-}
-```
-
-### List Clients
-
-```bash
-curl http://localhost:42618/api/v1/clients
 ```
 
 ---
 
 ## Part 4: Client Machine Setup
 
-Each client machine runs MClaw and connects to the gateway server.
+Each client machine runs a MClaw Gateway that executes commands.
 
-### Option A: Using Environment Variables
+### Option A: Local Client (client1 on dispatcher host)
 
-```bash
-# Set gateway connection details
-export MCLAW_GATEWAY_URL="http://your-gateway-server:42618"
-export MCLAW_CLIENT_ID="group-a"
-export MCLAW_CLIENT_SECRET="mc_group-a_1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3"
-
-# Run the agent
-./target/debug/mclaw daemon
-```
-
-### Option B: Using Config File
-
-Create `~/.mclaw/config.toml` on the client machine:
+Create `/root/.mclaw/config.toml`:
 
 ```toml
-# Configure mclaw provider to use the gateway
-[providers.mclaw]
-type = "mclaw"  # This tells MClaw to use the gateway provider
-gateway_url = "http://your-gateway-server:42618"
-client_id = "group-a"
-client_secret = "mc_group-a_1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3"
+[dispatcher]
+enabled = true
+machine_name = "client1"
+endpoint = "http://127.0.0.1:42619"
+auth_token = "YOUR_BOT_TOKEN"
+description = "Local gateway machine"
+default = true
 
-# Use mclaw as default provider
-[default_model]
-name = "mclaw"
-type = "mclaw"
+[gateway]
+enabled = true
+host = "127.0.0.1"
+port = 42618
+allow_public_bind = false
 ```
 
-Then start the daemon:
+### Option B: Remote Client (client2 on separate server)
+
+1. Build and install MClaw on the remote server:
 ```bash
-./target/debug/mclaw daemon
+# On remote server (51.255.93.22 example)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source ~/.cargo/env
+
+git clone https://github.com/dolphyvn/mclaw.git /opt/mclaw
+cd /opt/mclaw
+cargo build --release
+sudo cp target/release/mclaw /usr/local/bin/mclaw
+sudo chmod +x /usr/local/bin/mclaw
+```
+
+2. Create `/root/.mclaw/config.toml`:
+```toml
+[dispatcher]
+enabled = true
+machine_name = "client2"
+endpoint = "http://ns3366383.ip-37-187-77.eu:42619"
+auth_token = "YOUR_BOT_TOKEN"
+description = "Remote production server"
+default = false
+
+[gateway]
+enabled = true
+host = "0.0.0.0"  # Bind to all interfaces for external access
+port = 42618
+allow_public_bind = true
+```
+
+3. Create heartbeat script `/usr/local/bin/mclaw-heartbeat.sh`:
+```bash
+#!/bin/bash
+while true; do
+  sleep 30
+  curl -s -X POST http://ns3366383.ip-37-187-77.eu:42619/heartbeat \
+    -H 'Content-Type: application/json' \
+    -d '{"machine_name": "client2", "url": "http://51.255.93.22:42618"}'
+done
+```
+
+```bash
+sudo chmod +x /usr/local/bin/mclaw-heartbeat.sh
+```
+
+4. Register with dispatcher:
+```bash
+curl -X POST http://ns3366383.ip-37-187-77.eu:42619/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "machine_name": "client2",
+    "url": "http://51.255.93.22:42618",
+    "auth_token": "YOUR_BOT_TOKEN",
+    "description": "Remote production server",
+    "default": false
+  }'
 ```
 
 ---
 
-## Part 5: Configuration Reference
+## Part 5: Systemd Services
+
+Create systemd services for all components.
+
+### Dispatcher Service
+
+`/etc/systemd/system/mclaw-dispatcher.service`:
+
+```ini
+[Unit]
+Description=MClaw Dispatcher - Multi-machine command router
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+Environment="RUST_LOG=info"
+ExecStart=/usr/local/bin/mclaw dispatcher --config /etc/mclaw/dispatcher.toml
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Gateway Service (client1)
+
+`/etc/systemd/system/mclaw-gateway.service`:
+
+```ini
+[Unit]
+Description=MClaw Gateway - Command executor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+Environment="RUST_LOG=info"
+ExecStart=/usr/local/bin/mclaw gateway start
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Multi-Tenant Gateway Service
+
+`/etc/systemd/system/mclaw-multi-tenant-gateway.service`:
+
+```ini
+[Unit]
+Description=MClaw Multi-Tenant Gateway - Centralized LLM API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+Environment="RUST_LOG=info"
+ExecStart=/usr/local/bin/mclaw gateway-server --config-dir /etc/mclaw --port 42620 --host 0.0.0.0
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Heartbeat Service (for remote clients)
+
+`/etc/systemd/system/mclaw-heartbeat.service`:
+
+```ini
+[Unit]
+Description=MClaw Dispatcher Heartbeat
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/mclaw-heartbeat.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Enable and Start Services
+
+```bash
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable services (start on boot)
+sudo systemctl enable mclaw-dispatcher
+sudo systemctl enable mclaw-gateway
+sudo systemctl enable mclaw-multi-tenant-gateway
+sudo systemctl enable mclaw-heartbeat  # On remote clients only
+
+# Start services now
+sudo systemctl start mclaw-dispatcher
+sudo systemctl start mclaw-gateway
+sudo systemctl start mclaw-multi-tenant-gateway
+sudo systemctl start mclaw-heartbeat  # On remote clients only
+
+# Check status
+sudo systemctl status mclaw-dispatcher
+sudo systemctl status mclaw-gateway
+sudo systemctl status mclaw-multi-tenant-gateway
+```
+
+---
+
+## Part 6: Nginx HTTPS Reverse Proxy
+
+Set up Nginx for HTTPS access to all services.
+
+### Step 1: Install Nginx and Get SSL Certificate
+
+```bash
+# Install nginx
+sudo apt update
+sudo apt install nginx certbot python3-certbot-nginx
+
+# Get SSL certificate (replace with your domain)
+sudo certbot --nginx -d ml.ovh139.aliases.me
+```
+
+### Step 2: Configure Nginx
+
+`/etc/nginx/sites-available/mclaw.conf`:
+
+```nginx
+# Upstream definitions
+upstream dispatcher_backend {
+    server 127.0.0.1:42619 max_fails=1 fail_timeout=2s;
+}
+
+upstream multi_tenant_backend {
+    server 127.0.0.1:42620 max_fails=1 fail_timeout=2s;
+}
+
+server {
+    server_name ml.ovh139.aliases.me;
+
+    # === Dispatcher Routes ===
+
+    location /webhook {
+        proxy_pass http://dispatcher_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /dispatch {
+        proxy_pass http://dispatcher_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /dispatcher-health {
+        proxy_pass http://dispatcher_backend/health;
+        proxy_set_header Host $host;
+        access_log off;
+    }
+
+    location /admin {
+        proxy_pass http://dispatcher_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /register {
+        proxy_pass http://dispatcher_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /unregister {
+        proxy_pass http://dispatcher_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /heartbeat {
+        proxy_pass http://dispatcher_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /machines {
+        proxy_pass http://dispatcher_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # === Multi-Tenant Gateway Routes ===
+
+    location /api/v1/chat {
+        proxy_pass http://multi_tenant_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+    }
+
+    location /api/v1/clients {
+        proxy_pass http://multi_tenant_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /mt-health {
+        proxy_pass http://multi_tenant_backend/health;
+        proxy_set_header Host $host;
+        access_log off;
+    }
+
+    listen [::]:443 ssl;
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/ml.ovh139.aliases.me/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ml.ovh139.aliases.me/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+# HTTP to HTTPS redirect
+server {
+    if ($host = ml.ovh139.aliases.me) {
+        return 301 https://$host$request_uri;
+    }
+    listen 80;
+    listen [::]:80;
+    server_name ml.ovh139.aliases.me;
+    return 404;
+}
+```
+
+### Step 3: Enable and Reload Nginx
+
+```bash
+# Enable site
+sudo ln -s /etc/nginx/sites-available/mclaw.conf /etc/nginx/sites-enabled/
+
+# Test configuration
+sudo nginx -t
+
+# Reload nginx
+sudo systemctl reload nginx
+```
+
+### Step 4: Set Telegram Webhook
+
+```bash
+curl "https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook?url=https://ml.ovh139.aliases.me/webhook"
+```
+
+Update `/etc/mclaw/dispatcher.toml`:
+```toml
+[telegram]
+webhook_url = "https://ml.ovh139.aliases.me/webhook"
+```
+
+Restart dispatcher:
+```bash
+sudo systemctl restart mclaw-dispatcher
+```
+
+---
+
+## Part 7: Usage
+
+### Telegram Bot Commands
+
+Send these commands to your Telegram bot:
+
+```
+@list                           # List all machines
+@client1 uptime                 # Run on client1
+@client2 df -h                  # Run on client2
+@all systemctl status mclaw     # Run on all machines
+uptime                          # Run on default machine
+```
+
+### Multi-Tenant Gateway API
+
+```bash
+# Check health
+curl https://ml.ovh139.aliases.me/mt-health
+
+# List configured clients
+curl https://ml.ovh139.aliases.me/api/v1/clients | jq .
+
+# Send chat request
+curl -X POST https://ml.ovh139.aliases.me/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_id": "client1",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+### Dispatcher API
+
+```bash
+# Check health
+curl https://ml.ovh139.aliases.me/dispatcher-health
+
+# List machines with status
+curl https://ml.ovh139.aliases.me/admin/machines | jq .
+
+# Register a new machine
+curl -X POST https://ml.ovh139.aliases.me/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "machine_name": "new-client",
+    "url": "http://new-client:42618",
+    "auth_token": "YOUR_BOT_TOKEN",
+    "description": "New server",
+    "default": false
+  }'
+```
+
+---
+
+## Part 8: Service Management
+
+### Check Service Status
+
+```bash
+# Dispatcher
+sudo systemctl status mclaw-dispatcher
+sudo journalctl -u mclaw-dispatcher -f
+
+# Gateway
+sudo systemctl status mclaw-gateway
+sudo journalctl -u mclaw-gateway -f
+
+# Multi-Tenant Gateway
+sudo systemctl status mclaw-multi-tenant-gateway
+sudo journalctl -u mclaw-multi-tenant-gateway -f
+
+# Heartbeat (remote clients)
+sudo systemctl status mclaw-heartbeat
+```
+
+### Restart Services
+
+```bash
+sudo systemctl restart mclaw-dispatcher
+sudo systemctl restart mclaw-gateway
+sudo systemctl restart mclaw-multi-tenant-gateway
+```
+
+### View Logs
+
+```bash
+# All mclaw logs
+sudo journalctl -u "mclaw-*" -f
+
+# Specific service
+sudo journalctl -u mclaw-dispatcher -n 100
+```
+
+---
+
+## Configuration Reference
 
 ### Supported Providers
 
@@ -332,101 +743,53 @@ Then start the daemon:
 | GLM (Zhipu) | `glm` | Uses `id.secret` format |
 | Ollama | `ollama` | Local, requires `api_url` |
 | Gemini | `gemini` | Requires API key |
-| OpenAI-compatible | (custom) | Requires `api_url` |
+| OpenAI Codex (OAuth) | `openai-codex` | Uses `auth_profile` |
+| Gemini OAuth | `gemini-oauth` | Uses `auth_profile` |
 
-### Client Group Options
+### Multi-Tenant Group Options
 
 ```toml
-[multi_tenant.groups.<name>]
-# Required fields
-client_id = "group-name"           # Unique identifier
-client_secret = "mc_..."           # Generated secret
-provider = "openrouter"            # Provider name
-model = "model-name"               # Model to use
+[[groups]]
+# Required
+client_id = "group-name"
+client_secret = "mc_..."
+provider = "openrouter"
+model = "model-name"
 
 # Authentication (use one)
-api_key = "your-api-key"           # API key for this provider
+api_key = "your-api-key"
 # OR
-auth_profile = "profile-name"      # OAuth profile (for openai-codex, gemini-oauth)
+auth_profile = "profile-name"  # For OAuth providers
 
-# Optional fields
-api_url = "https://..."            # Custom API endpoint
-temperature = 0.7                  # Temperature (0.0-1.0)
-max_tokens = 4096                  # Max tokens per response
-rate_limit = 60                    # Requests per minute limit
+# Optional
+api_url = "https://..."
+temperature = 0.7
+max_tokens = 4096
+rate_limit = 60
 ```
 
-**Note:** For OAuth-based providers (`openai-codex`, `gemini-oauth`):
-1. Run `mclaw auth login <provider> --profile <profile-name>` on the gateway server first
-2. Use `auth_profile` instead of `api_key` in the group configuration
-3. The `api_key` field can be empty or omitted when using `auth_profile`
+### Dispatcher Machine Options
 
----
-
-## Part 6: Running as a Service
-
-### Systemd (Linux)
-
-Create `/etc/systemd/user/mclaw-gateway.service`:
-
-```ini
-[Unit]
-Description=MClaw Gateway Server
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/opt/mclaw/target/debug/mclaw gateway-server
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-```
-
-Enable and start:
-```bash
-systemctl --user enable mclaw-gateway
-systemctl --user start mclaw-gateway
-```
-
-### Launchd (macOS)
-
-Create `~/Library/LaunchAgents/com.mclaw.gateway.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.mclaw.gateway</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/opt/mclaw/target/debug/mclaw</string>
-        <string>gateway-server</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-</dict>
-</plist>
-```
-
-Load and start:
-```bash
-launchctl load ~/Library/LaunchAgents/com.mclaw.gateway.plist
+```toml
+[[machines]]
+name = "machine-name"      # Unique identifier
+url = "http://host:42618"  # Gateway URL
+default = true             # Is this the default machine?
+description = "Description"
+# token = "..."            # Optional auth token
 ```
 
 ---
 
-## Part 7: Security Considerations
+## Security Considerations
 
-1. **API Key Storage**: The gateway server holds all API keys. Secure the server machine properly.
-2. **Client Secrets**: Never share client secrets publicly. Treat them like passwords.
-3. **Network Security**: Use HTTPS/TLS in production. Consider using a reverse proxy (nginx, traefik).
-4. **Firewall**: Restrict access to the gateway port (42618) to trusted networks only.
-5. **Rate Limiting**: Configure `rate_limit` per client to prevent abuse.
+1. **API Key Storage**: The gateway server holds all API keys. Secure the server machine.
+2. **Client Secrets**: Never share client secrets publicly.
+3. **Firewall**: Restrict access to ports 42618, 42619, 42620 to trusted networks.
+4. **HTTPS**: Always use HTTPS in production with valid SSL certificates.
+5. **Telegram Authorization**: Only allow trusted users in `allowed_users`.
+6. **Rate Limiting**: Configure per-client rate limits to prevent abuse.
+7. **Heartbeat Timeout**: Machines without heartbeat for 60 seconds are removed.
 
 ---
 
@@ -434,11 +797,14 @@ launchctl load ~/Library/LaunchAgents/com.mclaw.gateway.plist
 
 | Command | Description |
 |---------|-------------|
-| `mclaw daemon` | Start the agent daemon (full agent with channels, scheduler) |
+| `mclaw daemon` | Start the agent daemon |
+| `mclaw dispatcher` | Start the dispatcher |
 | `mclaw gateway-server` | Start the multi-tenant LLM gateway |
+| `mclaw gateway start` | Start the command gateway |
+| `mclaw generate-secret <id>` | Generate a client secret |
+| `mclaw list-clients` | List gateway clients |
+| `mclaw auth login <provider>` | Login to OAuth provider |
 | `mclaw agent -m "message"` | Run a single agent interaction |
-| `mclaw generate-secret <id>` | Generate a new client secret |
-| `mclaw list-clients` | List configured gateway clients |
 | `mclaw onboard` | Run the setup wizard |
 | `mclaw status` | Show system status |
 | `mclaw doctor` | Run diagnostics |
@@ -447,11 +813,11 @@ launchctl load ~/Library/LaunchAgents/com.mclaw.gateway.plist
 
 ## Documentation
 
-For full ZeroClaw documentation (inherited by MClaw):
-
 - [CLAUDE.md](CLAUDE.md) - Project instructions and workflow
 - [README.zeroclaw.md](README.zeroclaw.md) - ZeroClaw original README
 - [docs/](docs/) - Comprehensive documentation
+- [docs/client-setup.md](docs/client-setup.md) - Client machine setup guide
+- [deploy/dispatcher/DEPLOYMENT.md](deploy/dispatcher/DEPLOYMENT.md) - Deployment details
 
 ---
 
