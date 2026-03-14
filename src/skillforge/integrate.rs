@@ -1,4 +1,4 @@
-//! Integrator — generates ZeroClaw-standard SKILL.toml + SKILL.md from scout results.
+//! Integrator — generates MClaw-standard SKILL.toml + SKILL.md from scout results.
 
 use std::fs;
 use std::path::PathBuf;
@@ -75,7 +75,7 @@ stars = {stars}
 updated_at = "{updated}"
 
 [skill.requirements]
-runtime = "zeroclaw >= 0.1"
+runtime = "mclaw >= 0.1"
 
 [skill.metadata]
 auto_integrated = true
@@ -115,7 +115,7 @@ forge_timestamp = "{now}"
 ## Usage
 
 ```toml
-# Add to your ZeroClaw config:
+# Add to your MClaw config:
 [skills.{name}]
 enabled = true
 ```

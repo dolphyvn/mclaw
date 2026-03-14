@@ -185,7 +185,7 @@ impl ProxyConfigTool {
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("'scope' must be a string"))?;
             proxy.scope = Self::parse_scope(scope).ok_or_else(|| {
-                anyhow::anyhow!("Invalid scope '{scope}'. Use environment|zeroclaw|services")
+                anyhow::anyhow!("Invalid scope '{scope}'. Use environment|mclaw|services")
             })?;
         }
 
@@ -342,7 +342,7 @@ impl Tool for ProxyConfigTool {
     }
 
     fn description(&self) -> &str {
-        "Manage MClaw proxy settings (scope: environment | zeroclaw | services), including runtime and process env application"
+        "Manage MClaw proxy settings (scope: environment | mclaw | services), including runtime and process env application"
     }
 
     fn parameters_schema(&self) -> Value {

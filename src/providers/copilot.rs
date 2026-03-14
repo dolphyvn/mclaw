@@ -164,7 +164,7 @@ struct ResponseMessage {
 /// GitHub Copilot provider with automatic OAuth and token refresh.
 ///
 /// On first use, prompts the user to visit github.com/login/device.
-/// Tokens are cached to `~/.config/zeroclaw/copilot/` and refreshed
+/// Tokens are cached to `~/.config/mclaw/copilot/` and refreshed
 /// automatically.
 pub struct CopilotProvider {
     github_token: Option<String>,
@@ -176,7 +176,7 @@ pub struct CopilotProvider {
 
 impl CopilotProvider {
     pub fn new(github_token: Option<&str>) -> Self {
-        let token_dir = directories::ProjectDirs::from("", "", "zeroclaw")
+        let token_dir = directories::ProjectDirs::from("", "", "mclaw")
             .map(|dir| dir.config_dir().join("copilot"))
             .unwrap_or_else(|| {
                 // Fall back to a user-specific temp directory to avoid

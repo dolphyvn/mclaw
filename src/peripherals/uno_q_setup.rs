@@ -1,4 +1,4 @@
-//! Deploy ZeroClaw Bridge app to Arduino Uno Q.
+//! Deploy MClaw Bridge app to Arduino Uno Q.
 
 use anyhow::{Context, Result};
 use std::process::Command;
@@ -74,7 +74,7 @@ fn deploy_remote(host: &str, bridge_dir: &std::path::Path) -> Result<()> {
         anyhow::bail!("Failed to start Bridge app. Ensure arduino-app-cli is installed on Uno Q.");
     }
 
-    println!("ZeroClaw Bridge app started. Add to config.toml:");
+    println!("MClaw Bridge app started. Add to config.toml:");
     println!("  [[peripherals.boards]]");
     println!("  board = \"arduino-uno-q\"");
     println!("  transport = \"bridge\"");
@@ -105,7 +105,7 @@ fn deploy_local(bridge_dir: Option<&std::path::Path>) -> Result<()> {
         anyhow::bail!("Failed to start Bridge app. Ensure arduino-app-cli is installed on Uno Q.");
     }
 
-    println!("ZeroClaw Bridge app started.");
+    println!("MClaw Bridge app started.");
     Ok(())
 }
 

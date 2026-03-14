@@ -41,7 +41,7 @@ pub fn list_configured_boards(config: &PeripheralsConfig) -> Vec<&PeripheralBoar
     config.boards.iter().collect()
 }
 
-/// Handle `zeroclaw peripheral` subcommands.
+/// Handle `mclaw peripheral` subcommands.
 #[allow(clippy::module_name_repetitions)]
 pub async fn handle_command(cmd: crate::PeripheralCommands, config: &Config) -> Result<()> {
     match cmd {

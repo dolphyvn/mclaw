@@ -602,7 +602,7 @@ pub fn init_skills_dir(workspace_dir: &Path) -> Result<()> {
     if !readme.exists() {
         std::fs::write(
             &readme,
-            "# ZeroClaw Skills\n\n\
+            "# MClaw Skills\n\n\
              Each subdirectory is a skill. Create a `SKILL.toml` or `SKILL.md` file inside.\n\n\
              ## SKILL.toml format\n\n\
              ```toml\n\
@@ -1372,7 +1372,7 @@ description = "Bare minimum"
     fn skills_dir_path() {
         let base = std::path::Path::new("/home/user/.zeroclaw");
         let dir = skills_dir(base);
-        assert_eq!(dir, PathBuf::from("/home/user/.zeroclaw/skills"));
+        assert_eq!(dir, PathBuf::from("/home/user/.mclaw/skills"));
     }
 
     #[test]

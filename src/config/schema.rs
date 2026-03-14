@@ -59,9 +59,9 @@ static RUNTIME_PROXY_CLIENT_CACHE: OnceLock<RwLock<HashMap<String, reqwest::Clie
 
 // ── Top-level config ──────────────────────────────────────────────
 
-/// Top-level ZeroClaw configuration, loaded from `config.toml`.
+/// Top-level MClaw configuration, loaded from `config.toml`.
 ///
-/// Resolution order: `MCLAW_WORKSPACE` env → `active_workspace.toml` marker → `~/.zeroclaw/config.toml`.
+/// Resolution order: `MCLAW_WORKSPACE` env → `active_workspace.toml` marker → `~/.mclaw/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Config {
     /// Workspace directory - computed from home, not serialized
@@ -1325,7 +1325,7 @@ impl Default for WebSearchConfig {
 pub enum ProxyScope {
     /// Use system environment proxy variables only.
     Environment,
-    /// Apply proxy to all ZeroClaw-managed HTTP traffic (default).
+    /// Apply proxy to all MClaw-managed HTTP traffic (default).
     #[default]
     Zeroclaw,
     /// Apply proxy only to explicitly listed service selectors.
@@ -1768,7 +1768,7 @@ pub fn build_runtime_proxy_client_with_timeouts(
 fn parse_proxy_scope(raw: &str) -> Option<ProxyScope> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "environment" | "env" => Some(ProxyScope::Environment),
-        "zeroclaw" | "internal" | "core" => Some(ProxyScope::Zeroclaw),
+        "mclaw" | "internal" | "core" => Some(ProxyScope::Zeroclaw),
         "services" | "service" => Some(ProxyScope::Services),
         _ => None,
     }
@@ -1862,7 +1862,7 @@ pub struct QdrantConfig {
     #[serde(default)]
     pub url: Option<String>,
     /// Qdrant collection name for storing memories.
-    /// Falls back to `QDRANT_COLLECTION` env var, or default "zeroclaw_memories".
+    /// Falls back to `QDRANT_COLLECTION` env var, or default "mclaw_memories".
     #[serde(default = "default_qdrant_collection")]
     pub collection: String,
     /// Optional API key for Qdrant Cloud or secured instances.
@@ -1872,7 +1872,7 @@ pub struct QdrantConfig {
 }
 
 fn default_qdrant_collection() -> String {
-    "zeroclaw_memories".into()
+    "mclaw_memories".into()
 }
 
 impl Default for QdrantConfig {
@@ -2053,7 +2053,7 @@ pub struct ObservabilityConfig {
     #[serde(default)]
     pub otel_endpoint: Option<String>,
 
-    /// Service name reported to the OTel collector. Defaults to "zeroclaw".
+    /// Service name reported to the OTel collector. Defaults to "mclaw".
     #[serde(default)]
     pub otel_service_name: Option<String>,
 
@@ -3318,7 +3318,7 @@ fn default_irc_port() -> u16 {
     6697
 }
 
-/// How ZeroClaw receives events from Feishu / Lark.
+/// How MClaw receives events from Feishu / Lark.
 ///
 /// - `websocket` (default) — persistent WSS long-connection; no public URL required.
 /// - `webhook`             — HTTP callback server; requires a public HTTPS endpoint.
@@ -3528,7 +3528,7 @@ pub struct EstopConfig {
 }
 
 fn default_estop_state_file() -> String {
-    "~/.zeroclaw/estop-state.json".to_string()
+    "~/.mclaw/estop-state.json".to_string()
 }
 
 impl Default for EstopConfig {
@@ -3755,11 +3755,11 @@ impl Default for Config {
     fn default() -> Self {
         let home =
             UserDirs::new().map_or_else(|| PathBuf::from("."), |u| u.home_dir().to_path_buf());
-        let zeroclaw_dir = home.join(".mclaw");
+        let mclaw_dir = home.join(".mclaw");
 
         Self {
-            workspace_dir: zeroclaw_dir.join("workspace"),
-            config_path: zeroclaw_dir.join("config.toml"),
+            workspace_dir: mclaw_dir.join("workspace"),
+            config_path: mclaw_dir.join("config.toml"),
             api_key: None,
             api_url: None,
             default_provider: Some("openrouter".to_string()),
@@ -3987,9 +3987,9 @@ pub(crate) fn resolve_config_dir_for_workspace(workspace_dir: &Path) -> (PathBuf
 /// This mirrors the same precedence used by `Config::load_or_init()`:
 /// `MCLAW_CONFIG_DIR` > `MCLAW_WORKSPACE` > active workspace marker > defaults.
 pub(crate) async fn resolve_runtime_dirs_for_onboarding() -> Result<(PathBuf, PathBuf)> {
-    let (default_zeroclaw_dir, default_workspace_dir) = default_config_and_workspace_dirs()?;
+    let (default_mclaw_dir, default_workspace_dir) = default_config_and_workspace_dirs()?;
     let (config_dir, workspace_dir, _) =
-        resolve_runtime_config_dirs(&default_zeroclaw_dir, &default_workspace_dir).await?;
+        resolve_runtime_config_dirs(&default_mclaw_dir, &default_workspace_dir).await?;
     Ok((config_dir, workspace_dir))
 }
 
@@ -4013,16 +4013,16 @@ impl ConfigResolutionSource {
 }
 
 async fn resolve_runtime_config_dirs(
-    default_zeroclaw_dir: &Path,
+    default_mclaw_dir: &Path,
     default_workspace_dir: &Path,
 ) -> Result<(PathBuf, PathBuf, ConfigResolutionSource)> {
     if let Ok(custom_config_dir) = std::env::var("MCLAW_CONFIG_DIR") {
         let custom_config_dir = custom_config_dir.trim();
         if !custom_config_dir.is_empty() {
-            let zeroclaw_dir = PathBuf::from(custom_config_dir);
+            let mclaw_dir = PathBuf::from(custom_config_dir);
             return Ok((
-                zeroclaw_dir.clone(),
-                zeroclaw_dir.join("workspace"),
+                mclaw_dir.clone(),
+                mclaw_dir.join("workspace"),
                 ConfigResolutionSource::EnvConfigDir,
             ));
         }
@@ -4030,28 +4030,28 @@ async fn resolve_runtime_config_dirs(
 
     if let Ok(custom_workspace) = std::env::var("MCLAW_WORKSPACE") {
         if !custom_workspace.is_empty() {
-            let (zeroclaw_dir, workspace_dir) =
+            let (mclaw_dir, workspace_dir) =
                 resolve_config_dir_for_workspace(&PathBuf::from(custom_workspace));
             return Ok((
-                zeroclaw_dir,
+                mclaw_dir,
                 workspace_dir,
                 ConfigResolutionSource::EnvWorkspace,
             ));
         }
     }
 
-    if let Some((zeroclaw_dir, workspace_dir)) =
-        load_persisted_workspace_dirs(default_zeroclaw_dir).await?
+    if let Some((mclaw_dir, workspace_dir)) =
+        load_persisted_workspace_dirs(default_mclaw_dir).await?
     {
         return Ok((
-            zeroclaw_dir,
+            mclaw_dir,
             workspace_dir,
             ConfigResolutionSource::ActiveWorkspaceMarker,
         ));
     }
 
     Ok((
-        default_zeroclaw_dir.to_path_buf(),
+        default_mclaw_dir.to_path_buf(),
         default_workspace_dir.to_path_buf(),
         ConfigResolutionSource::DefaultConfigDir,
     ))
@@ -4179,16 +4179,16 @@ fn read_codex_openai_api_key() -> Option<String> {
 
 impl Config {
     pub async fn load_or_init() -> Result<Self> {
-        let (default_zeroclaw_dir, default_workspace_dir) = default_config_and_workspace_dirs()?;
+        let (default_mclaw_dir, default_workspace_dir) = default_config_and_workspace_dirs()?;
 
-        let (zeroclaw_dir, workspace_dir, resolution_source) =
-            resolve_runtime_config_dirs(&default_zeroclaw_dir, &default_workspace_dir).await?;
+        let (mclaw_dir, workspace_dir, resolution_source) =
+            resolve_runtime_config_dirs(&default_mclaw_dir, &default_workspace_dir).await?;
 
-        let config_path = zeroclaw_dir.join("config.toml");
+        let config_path = mclaw_dir.join("config.toml");
 
-        fs::create_dir_all(&zeroclaw_dir)
+        fs::create_dir_all(&mclaw_dir)
             .await
-            .with_context(|| config_dir_creation_error(&zeroclaw_dir))?;
+            .with_context(|| config_dir_creation_error(&mclaw_dir))?;
         fs::create_dir_all(&workspace_dir)
             .await
             .context("Failed to create workspace directory")?;
@@ -4236,7 +4236,7 @@ impl Config {
             // Set computed paths that are skipped during serialization
             config.config_path = config_path.clone();
             config.workspace_dir = workspace_dir;
-            let store = crate::security::SecretStore::new(&zeroclaw_dir, config.secrets.encrypt);
+            let store = crate::security::SecretStore::new(&mclaw_dir, config.secrets.encrypt);
             decrypt_optional_secret(&store, &mut config.api_key, "config.api_key")?;
             decrypt_optional_secret(
                 &store,
@@ -4859,13 +4859,13 @@ impl Config {
         }
 
         // Proxy scope and service selectors.
-        if let Ok(scope_raw) = std::env::var("ZEROCLAW_PROXY_SCOPE") {
+        if let Ok(scope_raw) = std::env::var("MCLAW_PROXY_SCOPE") {
             if let Some(scope) = parse_proxy_scope(&scope_raw) {
                 self.proxy.scope = scope;
             } else {
                 tracing::warn!(
                     scope = %scope_raw,
-                    "Ignoring invalid ZEROCLAW_PROXY_SCOPE (valid: environment|zeroclaw|services)"
+                    "Ignoring invalid MCLAW_PROXY_SCOPE (valid: environment|mclaw|services)"
                 );
             }
         }
@@ -4889,11 +4889,11 @@ impl Config {
     pub async fn save(&self) -> Result<()> {
         // Encrypt secrets before serialization
         let mut config_to_save = self.clone();
-        let zeroclaw_dir = self
+        let mclaw_dir = self
             .config_path
             .parent()
             .context("Config path must have a parent directory")?;
-        let store = crate::security::SecretStore::new(zeroclaw_dir, self.secrets.encrypt);
+        let store = crate::security::SecretStore::new(mclaw_dir, self.secrets.encrypt);
 
         encrypt_optional_secret(&store, &mut config_to_save.api_key, "config.api_key")?;
         encrypt_optional_secret(
@@ -5108,7 +5108,7 @@ mod tests {
         let msg = config_dir_creation_error(Path::new("/etc/zeroclaw"));
         assert!(msg.contains("/etc/zeroclaw"));
         assert!(msg.contains("OpenRC"));
-        assert!(msg.contains("zeroclaw"));
+        assert!(msg.contains("mclaw"));
     }
 
     #[test]
@@ -5452,7 +5452,7 @@ default_temperature = 0.7
 
 [storage.provider.config]
 provider = "postgres"
-dbURL = "postgres://postgres:postgres@localhost:5432/zeroclaw"
+dbURL = "postgres://postgres:postgres@localhost:5432/mclaw"
 schema = "public"
 table = "memories"
 connect_timeout_secs = 12
@@ -5462,7 +5462,7 @@ connect_timeout_secs = 12
         assert_eq!(parsed.storage.provider.config.provider, "postgres");
         assert_eq!(
             parsed.storage.provider.config.db_url.as_deref(),
-            Some("postgres://postgres:postgres@localhost:5432/zeroclaw")
+            Some("postgres://postgres:postgres@localhost:5432/mclaw")
         );
         assert_eq!(parsed.storage.provider.config.schema, "public");
         assert_eq!(parsed.storage.provider.config.table, "memories");
@@ -5517,7 +5517,7 @@ tool_dispatcher = "xml"
     #[tokio::test]
     async fn sync_directory_handles_existing_directory() {
         let dir = std::env::temp_dir().join(format!(
-            "zeroclaw_test_sync_directory_{}",
+            "mclaw_test_sync_directory_{}",
             uuid::Uuid::new_v4()
         ));
         fs::create_dir_all(&dir).await.unwrap();
@@ -5529,7 +5529,7 @@ tool_dispatcher = "xml"
 
     #[tokio::test]
     async fn config_save_and_load_tmpdir() {
-        let dir = std::env::temp_dir().join("zeroclaw_test_config");
+        let dir = std::env::temp_dir().join("mclaw_test_config");
         let _ = fs::remove_dir_all(&dir).await;
         fs::create_dir_all(&dir).await.unwrap();
 
@@ -5601,7 +5601,7 @@ tool_dispatcher = "xml"
     #[tokio::test]
     async fn config_save_encrypts_nested_credentials() {
         let dir = std::env::temp_dir().join(format!(
-            "zeroclaw_test_nested_credentials_{}",
+            "mclaw_test_nested_credentials_{}",
             uuid::Uuid::new_v4()
         ));
         fs::create_dir_all(&dir).await.unwrap();
@@ -5687,7 +5687,7 @@ tool_dispatcher = "xml"
     #[tokio::test]
     async fn config_save_atomic_cleanup() {
         let dir =
-            std::env::temp_dir().join(format!("zeroclaw_test_config_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("mclaw_test_config_{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).await.unwrap();
 
         let config_path = dir.join("config.toml");
@@ -6094,7 +6094,7 @@ channel_id = "C123"
             phone_number_id: Some("123".into()),
             verify_token: Some("ver".into()),
             app_secret: None,
-            session_path: Some("~/.zeroclaw/state/whatsapp-web/session.db".into()),
+            session_path: Some("~/.mclaw/state/whatsapp-web/session.db".into()),
             pair_phone: None,
             pair_code: None,
             allowed_numbers: vec!["+1".into()],
@@ -6110,7 +6110,7 @@ channel_id = "C123"
             phone_number_id: None,
             verify_token: None,
             app_secret: None,
-            session_path: Some("~/.zeroclaw/state/whatsapp-web/session.db".into()),
+            session_path: Some("~/.mclaw/state/whatsapp-web/session.db".into()),
             pair_phone: None,
             pair_code: None,
             allowed_numbers: vec![],
@@ -6480,7 +6480,7 @@ default_temperature = 0.7
             "ZEROCLAW_HTTPS_PROXY",
             "ZEROCLAW_ALL_PROXY",
             "ZEROCLAW_NO_PROXY",
-            "ZEROCLAW_PROXY_SCOPE",
+            "MCLAW_PROXY_SCOPE",
             "ZEROCLAW_PROXY_SERVICES",
             "HTTP_PROXY",
             "HTTPS_PROXY",
@@ -6963,7 +6963,7 @@ requires_openai_auth = true
     async fn load_or_init_workspace_override_uses_workspace_root_for_config() {
         let _env_guard = env_override_lock().await;
         let temp_home =
-            std::env::temp_dir().join(format!("zeroclaw_test_home_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("mclaw_test_home_{}", uuid::Uuid::new_v4()));
         let workspace_dir = temp_home.join("profile-a");
 
         let original_home = std::env::var("HOME").ok();
@@ -6989,7 +6989,7 @@ requires_openai_auth = true
     async fn load_or_init_workspace_suffix_uses_legacy_config_layout() {
         let _env_guard = env_override_lock().await;
         let temp_home =
-            std::env::temp_dir().join(format!("zeroclaw_test_home_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("mclaw_test_home_{}", uuid::Uuid::new_v4()));
         let workspace_dir = temp_home.join("workspace");
         let legacy_config_path = temp_home.join(".mclaw").join("config.toml");
 
@@ -7016,7 +7016,7 @@ requires_openai_auth = true
     async fn load_or_init_workspace_override_keeps_existing_legacy_config() {
         let _env_guard = env_override_lock().await;
         let temp_home =
-            std::env::temp_dir().join(format!("zeroclaw_test_home_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("mclaw_test_home_{}", uuid::Uuid::new_v4()));
         let workspace_dir = temp_home.join("custom-workspace");
         let legacy_config_dir = temp_home.join(".mclaw");
         let legacy_config_path = legacy_config_dir.join("config.toml");
@@ -7054,7 +7054,7 @@ default_model = "legacy-model"
     async fn load_or_init_uses_persisted_active_workspace_marker() {
         let _env_guard = env_override_lock().await;
         let temp_home =
-            std::env::temp_dir().join(format!("zeroclaw_test_home_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("mclaw_test_home_{}", uuid::Uuid::new_v4()));
         let custom_config_dir = temp_home.join("profiles").join("agent-alpha");
 
         fs::create_dir_all(&custom_config_dir).await.unwrap();
@@ -7091,7 +7091,7 @@ default_model = "legacy-model"
     async fn load_or_init_env_workspace_override_takes_priority_over_marker() {
         let _env_guard = env_override_lock().await;
         let temp_home =
-            std::env::temp_dir().join(format!("zeroclaw_test_home_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("mclaw_test_home_{}", uuid::Uuid::new_v4()));
         let marker_config_dir = temp_home.join("profiles").join("persisted-profile");
         let env_workspace_dir = temp_home.join("env-workspace");
 
@@ -7128,7 +7128,7 @@ default_model = "legacy-model"
     async fn persist_active_workspace_marker_is_cleared_for_default_config_dir() {
         let _env_guard = env_override_lock().await;
         let temp_home =
-            std::env::temp_dir().join(format!("zeroclaw_test_home_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("mclaw_test_home_{}", uuid::Uuid::new_v4()));
         let default_config_dir = temp_home.join(".mclaw");
         let custom_config_dir = temp_home.join("profiles").join("custom-profile");
         let marker_path = default_config_dir.join(ACTIVE_WORKSPACE_STATE_FILE);
@@ -7396,7 +7396,7 @@ default_model = "legacy-model"
             "ZEROCLAW_PROXY_SERVICES",
             "provider.openai, tool.http_request",
         );
-        std::env::set_var("ZEROCLAW_PROXY_SCOPE", "services");
+        std::env::set_var("MCLAW_PROXY_SCOPE", "services");
 
         config.apply_env_overrides();
 
@@ -7420,7 +7420,7 @@ default_model = "legacy-model"
 
         let mut config = Config::default();
         std::env::set_var("ZEROCLAW_PROXY_ENABLED", "true");
-        std::env::set_var("ZEROCLAW_PROXY_SCOPE", "environment");
+        std::env::set_var("MCLAW_PROXY_SCOPE", "environment");
         std::env::set_var("ZEROCLAW_HTTP_PROXY", "http://127.0.0.1:7890");
         std::env::set_var("ZEROCLAW_HTTPS_PROXY", "http://127.0.0.1:7891");
         std::env::set_var("ZEROCLAW_NO_PROXY", "localhost,127.0.0.1");
@@ -7836,7 +7836,7 @@ gated_domain_categories = ["banking"]
 
 [security.estop]
 enabled = true
-state_file = "~/.zeroclaw/estop-state.json"
+state_file = "~/.mclaw/estop-state.json"
 require_otp_to_resume = true
 "#,
         )

@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn native_storage_path_contains_zeroclaw() {
         let path = NativeRuntime::new().storage_path();
-        assert!(path.to_string_lossy().contains("zeroclaw"));
+        assert!(path.to_string_lossy().contains("mclaw"));
     }
 
     #[test]

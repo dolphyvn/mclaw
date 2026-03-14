@@ -675,7 +675,7 @@ fn zai_base_url(name: &str) -> Option<&'static str> {
 pub struct ProviderRuntimeOptions {
     pub auth_profile_override: Option<String>,
     pub provider_api_url: Option<String>,
-    pub zeroclaw_dir: Option<PathBuf>,
+    pub mclaw_dir: Option<PathBuf>,
     pub secrets_encrypt: bool,
     pub reasoning_enabled: Option<bool>,
 }
@@ -685,7 +685,7 @@ impl Default for ProviderRuntimeOptions {
         Self {
             auth_profile_override: None,
             provider_api_url: None,
-            zeroclaw_dir: None,
+            mclaw_dir: None,
             secrets_encrypt: true,
             reasoning_enabled: None,
         }
@@ -1047,7 +1047,7 @@ fn create_provider_with_url_and_options(
         ))),
         "gemini" | "google" | "google-gemini" => {
             let state_dir = options
-                .zeroclaw_dir
+                .mclaw_dir
                 .clone()
                 .unwrap_or_else(|| {
                     directories::UserDirs::new().map_or_else(
@@ -1325,7 +1325,7 @@ fn create_provider_with_url_and_options(
         }
 
         _ => anyhow::bail!(
-            "Unknown provider: {name}. Check README for supported providers or run `zeroclaw onboard --interactive` to reconfigure.\n\
+            "Unknown provider: {name}. Check README for supported providers or run `mclaw onboard --interactive` to reconfigure.\n\
              Tip: Use \"custom:https://your-api.com\" for OpenAI-compatible endpoints.\n\
              Tip: Use \"anthropic-custom:https://your-api.com\" for Anthropic-compatible endpoints."
         ),
@@ -1541,7 +1541,7 @@ pub struct ProviderInfo {
     pub local: bool,
 }
 
-/// Return the list of all known providers for display in `zeroclaw providers list`.
+/// Return the list of all known providers for display in `mclaw providers list`.
 ///
 /// This is intentionally separate from the factory match in `create_provider`
 /// (display concern vs. construction concern).

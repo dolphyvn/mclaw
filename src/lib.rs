@@ -85,10 +85,10 @@ and WebSocket connections. Bind address defaults to the values in \
 your config file (gateway.host / gateway.port).
 
 Examples:
-  zeroclaw gateway start              # use config defaults
-  zeroclaw gateway start -p 8080      # listen on port 8080
-  zeroclaw gateway start --host 0.0.0.0   # requires [gateway].allow_public_bind=true or a tunnel
-  zeroclaw gateway start -p 0         # random available port")]
+  mclaw gateway start              # use config defaults
+  mclaw gateway start -p 8080      # listen on port 8080
+  mclaw gateway start --host 0.0.0.0   # requires [gateway].allow_public_bind=true or a tunnel
+  mclaw gateway start -p 0         # random available port")]
     Start {
         /// Port to listen on (use 0 for random available port); defaults to config gateway.port
         #[arg(short, long)]
@@ -107,8 +107,8 @@ Stops the running gateway if present, then starts a new instance \
 with the current configuration.
 
 Examples:
-  zeroclaw gateway restart            # restart with config defaults
-  zeroclaw gateway restart -p 8080    # restart on port 8080")]
+  mclaw gateway restart            # restart with config defaults
+  mclaw gateway restart -p 8080    # restart on port 8080")]
     Restart {
         /// Port to listen on (use 0 for random available port); defaults to config gateway.port
         #[arg(short, long)]
@@ -130,8 +130,8 @@ With --new, generates a fresh pairing code even if the gateway \
 was previously paired (useful for adding additional clients).
 
 Examples:
-  zeroclaw gateway get-paircode       # show current pairing code
-  zeroclaw gateway get-paircode --new # generate a new pairing code")]
+  mclaw gateway get-paircode       # show current pairing code
+  mclaw gateway get-paircode --new # generate a new pairing code")]
     GetPaircode {
         /// Generate a new pairing code (even if already paired)
         #[arg(long)]
@@ -175,8 +175,8 @@ configuration keys for that channel type.
 Supported types: telegram, discord, slack, whatsapp, matrix, imessage, email.
 
 Examples:
-  zeroclaw channel add telegram '{\"bot_token\":\"...\",\"name\":\"my-bot\"}'
-  zeroclaw channel add discord '{\"bot_token\":\"...\",\"name\":\"my-discord\"}'")]
+  mclaw channel add telegram '{\"bot_token\":\"...\",\"name\":\"my-bot\"}'
+  mclaw channel add discord '{\"bot_token\":\"...\",\"name\":\"my-discord\"}'")]
     Add {
         /// Channel type (telegram, discord, slack, whatsapp, matrix, imessage, email)
         channel_type: String,
@@ -197,8 +197,8 @@ ID to the channel allowlist so the agent will respond to messages \
 from that identity.
 
 Examples:
-  zeroclaw channel bind-telegram zeroclaw_user
-  zeroclaw channel bind-telegram 123456789")]
+  mclaw channel bind-telegram zeroclaw_user
+  mclaw channel bind-telegram 123456789")]
     BindTelegram {
         /// Telegram identity to allow (username without '@' or numeric user ID)
         identity: String,
@@ -230,7 +230,7 @@ pub enum SkillCommands {
 /// Migration subcommands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MigrateCommands {
-    /// Import memory from an `OpenClaw` workspace into this `ZeroClaw` workspace
+    /// Import memory from an `OpenClaw` workspace into this `MClaw` workspace
     Openclaw {
         /// Optional path to `OpenClaw` workspace (defaults to ~/.openclaw/workspace)
         #[arg(long)]
@@ -256,8 +256,8 @@ Times are evaluated in UTC by default; use --tz with an IANA \
 timezone name to override.
 
 Examples:
-  zeroclaw cron add '0 9 * * 1-5' 'Good morning' --tz America/New_York
-  zeroclaw cron add '*/30 * * * *' 'Check system health'")]
+  mclaw cron add '0 9 * * 1-5' 'Good morning' --tz America/New_York
+  mclaw cron add '*/30 * * * *' 'Check system health'")]
     Add {
         /// Cron expression
         expression: String,
@@ -274,8 +274,8 @@ Add a one-shot task that fires at a specific UTC timestamp.
 The timestamp must be in RFC 3339 format (e.g. 2025-01-15T14:00:00Z).
 
 Examples:
-  zeroclaw cron add-at 2025-01-15T14:00:00Z 'Send reminder'
-  zeroclaw cron add-at 2025-12-31T23:59:00Z 'Happy New Year!'")]
+  mclaw cron add-at 2025-01-15T14:00:00Z 'Send reminder'
+  mclaw cron add-at 2025-12-31T23:59:00Z 'Happy New Year!'")]
     AddAt {
         /// One-shot timestamp in RFC3339 format
         at: String,
@@ -289,8 +289,8 @@ Add a task that repeats at a fixed interval.
 Interval is specified in milliseconds. For example, 60000 = 1 minute.
 
 Examples:
-  zeroclaw cron add-every 60000 'Ping heartbeat'     # every minute
-  zeroclaw cron add-every 3600000 'Hourly report'    # every hour")]
+  mclaw cron add-every 60000 'Ping heartbeat'     # every minute
+  mclaw cron add-every 3600000 'Hourly report'    # every hour")]
     AddEvery {
         /// Interval in milliseconds
         every_ms: u64,
@@ -305,9 +305,9 @@ Accepts human-readable durations: s (seconds), m (minutes), \
 h (hours), d (days).
 
 Examples:
-  zeroclaw cron once 30m 'Run backup in 30 minutes'
-  zeroclaw cron once 2h 'Follow up on deployment'
-  zeroclaw cron once 1d 'Daily check'")]
+  mclaw cron once 30m 'Run backup in 30 minutes'
+  mclaw cron once 2h 'Follow up on deployment'
+  mclaw cron once 1d 'Daily check'")]
     Once {
         /// Delay duration
         delay: String,
@@ -326,9 +326,9 @@ Update one or more fields of an existing scheduled task.
 Only the fields you specify are changed; others remain unchanged.
 
 Examples:
-  zeroclaw cron update <task-id> --expression '0 8 * * *'
-  zeroclaw cron update <task-id> --tz Europe/London --name 'Morning check'
-  zeroclaw cron update <task-id> --command 'Updated message'")]
+  mclaw cron update <task-id> --expression '0 8 * * *'
+  mclaw cron update <task-id> --tz Europe/London --name 'Morning check'
+  mclaw cron update <task-id> --command 'Updated message'")]
     Update {
         /// Task ID
         id: String,
@@ -417,7 +417,7 @@ Scans connected USB devices by VID/PID and matches them against \
 known development boards (STM32 Nucleo, Arduino, ESP32).
 
 Examples:
-  zeroclaw hardware discover")]
+  mclaw hardware discover")]
     Discover,
     /// Introspect a device by path (e.g. /dev/ttyACM0)
     #[command(long_about = "\
@@ -427,8 +427,8 @@ Opens the specified device path and queries for board information, \
 firmware version, and supported capabilities.
 
 Examples:
-  zeroclaw hardware introspect /dev/ttyACM0
-  zeroclaw hardware introspect COM3")]
+  mclaw hardware introspect /dev/ttyACM0
+  mclaw hardware introspect COM3")]
     Introspect {
         /// Serial or device path
         path: String,
@@ -441,8 +441,8 @@ Queries the target MCU directly through the debug probe without \
 requiring any firmware on the target board.
 
 Examples:
-  zeroclaw hardware info
-  zeroclaw hardware info --chip STM32F401RETx")]
+  mclaw hardware info
+  mclaw hardware info --chip STM32F401RETx")]
     Info {
         /// Chip name (e.g. STM32F401RETx). Default: STM32F401RETx for Nucleo-F401RE
         #[arg(long, default_value = "STM32F401RETx")]
@@ -466,26 +466,26 @@ single-board computers like Raspberry Pi.
 Supported boards: nucleo-f401re, rpi-gpio, esp32, arduino-uno.
 
 Examples:
-  zeroclaw peripheral add nucleo-f401re /dev/ttyACM0
-  zeroclaw peripheral add rpi-gpio native
-  zeroclaw peripheral add esp32 /dev/ttyUSB0")]
+  mclaw peripheral add nucleo-f401re /dev/ttyACM0
+  mclaw peripheral add rpi-gpio native
+  mclaw peripheral add esp32 /dev/ttyUSB0")]
     Add {
         /// Board type (nucleo-f401re, rpi-gpio, esp32)
         board: String,
         /// Path for serial transport (/dev/ttyACM0) or "native" for local GPIO
         path: String,
     },
-    /// Flash ZeroClaw firmware to Arduino (creates .ino, installs arduino-cli if needed, uploads)
+    /// Flash MClaw firmware to Arduino (creates .ino, installs arduino-cli if needed, uploads)
     #[command(long_about = "\
-Flash ZeroClaw firmware to an Arduino board.
+Flash MClaw firmware to an Arduino board.
 
 Generates the .ino sketch, installs arduino-cli if it is not \
 already available, compiles, and uploads the firmware.
 
 Examples:
-  zeroclaw peripheral flash
-  zeroclaw peripheral flash --port /dev/cu.usbmodem12345
-  zeroclaw peripheral flash -p COM3")]
+  mclaw peripheral flash
+  mclaw peripheral flash --port /dev/cu.usbmodem12345
+  mclaw peripheral flash -p COM3")]
     Flash {
         /// Serial port (e.g. /dev/cu.usbmodem12345). If omitted, uses first arduino-uno from config.
         #[arg(short, long)]
@@ -497,6 +497,6 @@ Examples:
         #[arg(long)]
         host: Option<String>,
     },
-    /// Flash ZeroClaw firmware to Nucleo-F401RE (builds + probe-rs run)
+    /// Flash MClaw firmware to Nucleo-F401RE (builds + probe-rs run)
     FlashNucleo,
 }

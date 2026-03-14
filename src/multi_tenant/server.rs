@@ -150,7 +150,7 @@ fn create_provider(
         // Use OAuth-based provider creation
         let profile = auth_profile.unwrap_or("default");
         let options = ProviderRuntimeOptions {
-            zeroclaw_dir: Some(state_dir.clone()),
+            mclaw_dir: Some(state_dir.clone()),
             secrets_encrypt: config.secrets.encrypt,
             auth_profile_override: Some(profile.to_string()),
             ..Default::default()
