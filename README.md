@@ -449,7 +449,9 @@ port = 42618
 allow_public_bind = false
 ```
 
-**IMPORTANT**: The MClaw provider is configured via **environment variables**, not the config file. Update the systemd service:
+**IMPORTANT**: The MClaw provider can be configured via **environment variables** OR **config file**.
+
+### Option A: Environment Variables (Recommended for systemd)
 
 `/etc/systemd/system/mclaw-gateway.service` for client1:
 
@@ -522,6 +524,39 @@ WantedBy=multi-user.target
 Also set in `/root/.mclaw/config.toml`:
 ```toml
 default_provider = "mclaw"
+```
+
+### Option B: Config File (Alternative)
+
+Instead of environment variables, you can use a config file at `~/.mclaw/mclaw_provider.toml`:
+
+```toml
+gateway_url = "http://ns3366383.ip-37-187-77.eu:42620"
+client_id = "client2"
+client_secret = "mc_client2_..."  # Your generated secret
+```
+
+**Priority Order**: The provider checks configuration in this order:
+1. Environment variables (if ALL are set: `MCLAW_GATEWAY_URL`, `MCLAW_CLIENT_ID`, `MCLAW_CLIENT_SECRET`)
+2. Config file `~/.mclaw/mclaw_provider.toml`
+3. Defaults (localhost, client_id="default", empty secret)
+
+The systemd service file can be simpler when using the config file approach:
+
+```ini
+[Unit]
+Description=MClaw Gateway - Remote client
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment="RUST_LOG=info"
+ExecStart=/usr/local/bin/mclaw gateway start
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 Then reload and restart:

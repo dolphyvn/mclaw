@@ -21,6 +21,58 @@ pub struct MClawGatewayConfig {
     pub client_secret: String,
 }
 
+impl MClawGatewayConfig {
+    /// Create configuration from config file or environment variables.
+    ///
+    /// Priority order:
+    /// 1. Environment variables (MCLAW_GATEWAY_URL, MCLAW_CLIENT_ID, MCLAW_CLIENT_SECRET)
+    /// 2. Config file (~/.mclaw/mclaw_provider.toml)
+    /// 3. Defaults
+    pub fn from_config_or_env(
+        default_url: Option<String>,
+        fallback_key: Option<&str>,
+    ) -> Self {
+        // First try environment variables - check if all are present
+        let has_all_env_vars = std::env::var("MCLAW_GATEWAY_URL").is_ok()
+            && std::env::var("MCLAW_CLIENT_ID").is_ok()
+            && std::env::var("MCLAW_CLIENT_SECRET").is_ok();
+
+        if has_all_env_vars {
+            return Self {
+                gateway_url: std::env::var("MCLAW_GATEWAY_URL").unwrap(),
+                client_id: std::env::var("MCLAW_CLIENT_ID").unwrap(),
+                client_secret: std::env::var("MCLAW_CLIENT_SECRET").unwrap(),
+            };
+        }
+
+        // Try loading from config file
+        if let Some(config) = Self::load_from_file() {
+            return config;
+        }
+
+        // Fall back to defaults
+        Self {
+            gateway_url: default_url.unwrap_or_else(|| "http://localhost:42618".to_string()),
+            client_id: std::env::var("MCLAW_CLIENT_ID")
+                .unwrap_or_else(|_| "default".to_string()),
+            client_secret: std::env::var("MCLAW_CLIENT_SECRET")
+                .ok()
+                .or_else(|| fallback_key.map(String::from))
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Load configuration from ~/.mclaw/mclaw_provider.toml
+    fn load_from_file() -> Option<Self> {
+        let home = std::env::var("HOME").ok()?;
+        let config_path = format!("{}/.mclaw/mclaw_provider.toml", home);
+
+        let content = std::fs::read_to_string(&config_path).ok()?;
+
+        toml::from_str(&content).ok()
+    }
+}
+
 /// MClaw gateway provider.
 pub struct MClawGatewayProvider {
     config: MClawGatewayConfig,
@@ -35,6 +87,16 @@ impl MClawGatewayProvider {
             .unwrap();
 
         Self { config, client }
+    }
+
+    /// Create provider from config file or environment variables.
+    ///
+    /// Priority order:
+    /// 1. Environment variables (MCLAW_GATEWAY_URL, MCLAW_CLIENT_ID, MCLAW_CLIENT_SECRET)
+    /// 2. Config file (~/.mclaw/mclaw_provider.toml)
+    /// 3. Defaults
+    pub fn from_config_or_env(default_url: Option<String>, fallback_key: Option<&str>) -> Self {
+        Self::new(MClawGatewayConfig::from_config_or_env(default_url, fallback_key))
     }
 }
 

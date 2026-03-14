@@ -1064,21 +1064,11 @@ fn create_provider_with_url_and_options(
         }
         "telnyx" => Ok(Box::new(telnyx::TelnyxProvider::new(key))),
         "mclaw" => {
-            // MClaw gateway provider - expects MCLAW_GATEWAY_URL, MCLAW_CLIENT_ID, MCLAW_CLIENT_SECRET
-            let default_url = api_url.map(|u| u.to_string()).unwrap_or_else(|| "http://localhost:42618".to_string());
-            let gateway_url = std::env::var("MCLAW_GATEWAY_URL").unwrap_or(default_url);
-            let client_id = std::env::var("MCLAW_CLIENT_ID")
-                .unwrap_or_else(|_| "default".to_string());
-            let client_secret = std::env::var("MCLAW_CLIENT_SECRET")
-                .unwrap_or_else(|_| key.map(String::from).unwrap_or_default());
-
-            Ok(Box::new(mclaw::MClawGatewayProvider::new(
-                mclaw::MClawGatewayConfig {
-                    gateway_url,
-                    client_id,
-                    client_secret,
-                }
-            )))
+            // MClaw gateway provider - supports env vars or config file
+            // Priority: env vars -> ~/.mclaw/mclaw_provider.toml -> defaults
+            // Env vars: MCLAW_GATEWAY_URL, MCLAW_CLIENT_ID, MCLAW_CLIENT_SECRET
+            let default_url = api_url.map(|u| u.to_string());
+            Ok(Box::new(mclaw::MClawGatewayProvider::from_config_or_env(default_url, key)))
         }
 
         // ── OpenAI-compatible providers ──────────────────────
