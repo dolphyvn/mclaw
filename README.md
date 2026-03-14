@@ -447,19 +447,34 @@ enabled = true
 host = "127.0.0.1"
 port = 42618
 allow_public_bind = false
+```
 
-# === Configure to use Multi-Tenant Gateway ===
-# This tells the agent to use the centralized gateway instead of local provider
-[providers.mclaw]
-type = "mclaw"
-gateway_url = "http://127.0.0.1:42620"  # Multi-Tenant Gateway URL
-client_id = "client1"                   # Your assigned group/client ID
-client_secret = "mc_client1_..."         # Your secret from generate-secret
+**IMPORTANT**: The MClaw provider is configured via **environment variables**, not the config file. Update the systemd service:
 
-# Use mclaw as the default model
-[default_model]
-name = "mclaw"
-type = "mclaw"
+`/etc/systemd/system/mclaw-gateway.service` for client1:
+
+```ini
+[Unit]
+Description=MClaw Gateway - Local machine
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment="RUST_LOG=info"
+Environment="MCLAW_GATEWAY_URL=http://127.0.0.1:42620"
+Environment="MCLAW_CLIENT_ID=client1"
+Environment="MCLAW_CLIENT_SECRET=mc_client1_..."  # Your generated secret
+ExecStart=/usr/local/bin/mclaw gateway start
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Also set in `/root/.mclaw/config.toml`:
+```toml
+default_provider = "mclaw"
 ```
 
 #### For client2 (remote machine):
@@ -478,18 +493,41 @@ enabled = true
 host = "0.0.0.0"
 port = 42618
 allow_public_bind = true
+require_pairing = false  # Disable pairing for dispatcher connections
+```
 
-# === Configure to use Multi-Tenant Gateway ===
-# Point to the remote Multi-Tenant Gateway
-[providers.mclaw]
-type = "mclaw"
-gateway_url = "http://ns3366383.ip-37-187-77.eu:42620"
-client_id = "client2"
-client_secret = "mc_client2_..."
+**IMPORTANT**: Configure the MClaw provider via **environment variables** in the systemd service:
 
-[default_model]
-name = "mclaw"
-type = "mclaw"
+`/etc/systemd/system/mclaw-gateway.service` for client2:
+
+```ini
+[Unit]
+Description=MClaw Gateway - Remote client
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment="RUST_LOG=info"
+Environment="MCLAW_GATEWAY_URL=http://ns3366383.ip-37-187-77.eu:42620"
+Environment="MCLAW_CLIENT_ID=client2"
+Environment="MCLAW_CLIENT_SECRET=mc_client2_..."  # Your generated secret
+ExecStart=/usr/local/bin/mclaw gateway start
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Also set in `/root/.mclaw/config.toml`:
+```toml
+default_provider = "mclaw"
+```
+
+Then reload and restart:
+```bash
+systemctl daemon-reload
+systemctl restart mclaw-gateway
 ```
 
 ### How It Works
