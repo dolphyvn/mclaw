@@ -43,10 +43,15 @@ impl MClawClient {
     /// Send a command and get the response.
     pub async fn send_command(&self, command: &str) -> Result<String> {
         // Build WebSocket URL with token if provided
+        // Convert http:// to ws:// and https:// to wss://
+        let base_url = self.url
+            .replace("http://", "ws://")
+            .replace("https://", "wss://");
+
         let ws_url = if let Some(token) = &self.token {
-            format!("{}/ws/chat?token={}", self.url, token)
+            format!("{}/ws/chat?token={}", base_url, token)
         } else {
-            format!("{}/ws/chat", self.url)
+            format!("{}/ws/chat", base_url)
         };
 
         tracing::debug!("Connecting to {} for machine {}", ws_url, self.machine_name);
