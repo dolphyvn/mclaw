@@ -7,9 +7,20 @@ This tutorial walks you through setting up a 2-machine MClaw cluster with the di
 - A Telegram bot token
 - SSH access to both machines
 
-**Last verified:** March 14, 2026.
+**Last verified:** March 15, 2026.
 
-## Architecture
+## Choosing a Connection Mode
+
+MClaw dispatcher supports two connection modes:
+
+| Mode | How It Works | Best For |
+|------|--------------|----------|
+| **WebSocket** | Clients connect TO dispatcher | NAT/firewall scenarios, no public IP needed |
+| **HTTP** | Dispatcher connects TO clients | All machines have public IPs |
+
+**WebSocket mode (recommended)** works for machines behind NAT/firewall without requiring public IP addresses or inbound ports. This tutorial uses WebSocket mode.
+
+## Architecture (WebSocket Mode)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -21,14 +32,15 @@ This tutorial walks you through setting up a 2-machine MClaw cluster with the di
 │  Machine 1 (Gateway/Dispatcher)                              │
 │  - Public IP: 203.0.113.10                                   │
 │  - Runs: mclaw-dispatcher (port 42619)                       │
-│  - Runs: mclaw client (port 42618, machine_name: "gateway") │
+│  - Runs: mclaw client (machine_name: "gateway")              │
+│  - Accepts WebSocket connections                             │
 └─────────────────────────────────────────────────────────────┘
                          │
-                         ▼ (WebSocket)
+                         ▼ (WebSocket - outbound from client)
 ┌─────────────────────────────────────────────────────────────┐
-│  Machine 2 (Remote Client)                                   │
-│  - IP: 198.51.100.20                                         │
-│  - Runs: mclaw gateway (port 42618)                          │
+│  Machine 2 (Remote Client - behind NAT)                      │
+│  - Private IP: 192.168.1.20 (no public IP needed)           │
+│  - Runs: mclaw daemon (connects TO dispatcher)              │
 │  - machine_name: "remote"                                    │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -61,11 +73,6 @@ nano ~/.mclaw/config.toml
 [network]
 allowed_domains = ["api.anthropic.com", "api.openai.com"]
 
-[gateway]
-enabled = true
-host = "0.0.0.0"
-port = 42618
-
 [channels_config.telegram]
 # We'll set this on dispatcher, leave empty for now
 bot_token = ""
@@ -74,18 +81,9 @@ enabled = false
 [dispatcher]
 # This machine is also a client
 enabled = true
+mode = "ws"  # WebSocket mode
 machine_name = "gateway"
-dispatcher_url = "http://localhost:42619"
-```
-
-### 1.3 Generate Pairing Token
-
-```bash
-# Generate a pairing token for Machine 1
-mclaw --pair-generate
-
-# Save the output, e.g.:
-# Pairing token: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+endpoint = "ws://localhost:42619"
 ```
 
 ## Step 2: Install and Configure Dispatcher
@@ -131,13 +129,14 @@ path = "/etc/mclaw/machines.toml"
 [logging]
 level = "info"
 file = "/var/log/mclaw/dispatcher.log"
-
-[security]
-require_pairing = true
-rate_limit_per_user = 60
 ```
 
-### 2.3 Create Machines Registry
+### 2.3 Create Machines Registry (Optional)
+
+**Note:** With WebSocket mode, machines auto-register when they connect. The machines.toml file is optional and primarily useful for:
+- Pre-configuring authentication tokens
+- Setting a default machine
+- Adding descriptions
 
 ```bash
 sudo nano /etc/mclaw/machines.toml
@@ -145,14 +144,21 @@ sudo nano /etc/mclaw/machines.toml
 
 ```toml
 # /etc/mclaw/machines.toml
+# Optional: Pre-configure machines (WebSocket clients auto-register)
 
 [[machines]]
 name = "gateway"
 url = "http://localhost:42618"
-token = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"  # From Step 1.3
 default = true
+description = "Local gateway machine"
 
-# We'll add the remote machine after setting it up
+# Remote machines will auto-register via WebSocket
+# You can optionally pre-configure them with auth tokens:
+# [[machines]]
+# name = "remote"
+# token = "your_token_here"
+# default = false
+# description = "Remote client"
 ```
 
 ### 2.4 Set Up systemd Service
@@ -207,14 +213,7 @@ curl -fsSL https://raw.githubusercontent.com/zeroclaw-labs/mclaw/main/install.sh
 mclaw --version
 ```
 
-### 3.2 Configure Remote Client
-
-```bash
-# Generate pairing token for Machine 2
-mclaw --pair-generate
-
-# Save this token: b2c3d4e5-f6g7-8901-bcde-f12345678901
-```
+### 3.2 Configure Remote Client (WebSocket Mode)
 
 ```bash
 # Edit config
@@ -227,11 +226,6 @@ nano ~/.mclaw/config.toml
 [network]
 allowed_domains = ["api.anthropic.com", "api.openai.com"]
 
-[gateway]
-enabled = true
-host = "0.0.0.0"
-port = 42618
-
 [channels_config.telegram]
 # Empty - handled by dispatcher
 bot_token = ""
@@ -239,9 +233,11 @@ enabled = false
 
 [dispatcher]
 enabled = true
+mode = "ws"  # WebSocket mode
 machine_name = "remote"
-dispatcher_url = "http://203.0.113.10:42619"  # Gateway IP
-pairing_token = "b2c3d4e5-f6g7-8901-bcde-f12345678901"  # Generated above
+endpoint = "ws://203.0.113.10:42619"  # Dispatcher WebSocket URL
+auth_token = "your_token_here"  # Optional - if you pre-configure in machines.toml
+reconnect_interval_secs = 5
 ```
 
 ### 3.3 Start MClaw Client
@@ -255,36 +251,73 @@ mclaw service install
 mclaw service start
 ```
 
+### 3.4 Verify Connection
+
+On Machine 2, check logs for successful connection:
+```bash
+journalctl -u mclaw-daemon -f
+```
+
+Look for: `WebSocket client connected` or similar message.
+
+On Machine 1 (dispatcher), check the connected machines:
+```bash
+curl http://localhost:42619/machines
+```
+
 ## Step 4: Register Machine 2 with Dispatcher
 
-### 4.1 Add Machine to Registry
+### WebSocket Mode: Auto-Registration
 
-Back on Machine 1 (Gateway):
+With WebSocket mode, machines automatically register when they connect! No manual registration needed. Check the dispatcher logs:
+
+```bash
+sudo journalctl -u mclaw-dispatcher -f | grep "Auto-registering"
+```
+
+You should see:
+```
+Auto-registering new WebSocket client: remote
+WebSocket client connected: remote
+```
+
+### Optional: Pre-Configure Machine in machines.toml
+
+Pre-configuring machines in `/etc/mclaw/machines.toml` provides:
+- Persistence across dispatcher restarts
+- Token-based authentication
+- Custom description
 
 ```bash
 sudo nano /etc/mclaw/machines.toml
 ```
 
 ```toml
+# Pre-configured machines (optional for WebSocket clients)
+
 [[machines]]
 name = "gateway"
 url = "http://localhost:42618"
-token = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 default = true
+description = "Gateway machine"
 
 [[machines]]
 name = "remote"
-url = "http://198.51.100.20:42618"  # Or use domain name
-token = "b2c3d4e5-f6g7-8901-bcde-f12345678901"
+token = "your_auth_token_here"  # Must match auth_token in client config
 default = false
+description = "Remote client behind NAT"
 ```
 
-### 4.2 Reload Dispatcher
+### HTTP Mode Alternative
 
-```bash
-sudo systemctl reload mclaw-dispatcher
-# Or restart if reload doesn't work
-sudo systemctl restart mclaw-dispatcher
+If you need HTTP mode (dispatcher connects TO clients):
+
+```toml
+[[machines]]
+name = "remote"
+url = "http://198.51.100.20:42618"  # Client's reachable URL
+token = "pairing_token"
+default = false
 ```
 
 ## Step 5: Configure Telegram Webhook
@@ -341,41 +374,64 @@ Expected responses from both machines.
 
 ## Step 7: Add More Machines
 
-To add more machines, repeat Steps 3-4:
+### WebSocket Mode (Recommended)
 
 1. Install MClaw on new machine
-2. Generate pairing token
-3. Configure dispatcher settings
-4. Add entry to `/etc/mclaw/machines.toml`
-5. Reload dispatcher
+2. Configure dispatcher mode in `~/.mclaw/config.toml`:
+   ```toml
+   [dispatcher]
+   enabled = true
+   mode = "ws"
+   machine_name = "machine3"
+   endpoint = "ws://203.0.113.10:42619"
+   ```
+3. Start MClaw: `mclaw daemon`
+4. Machine auto-registers on connection!
 
-```toml
-[[machines]]
-name = "machine3"
-url = "http://10.0.0.100:42618"
-token = "new_pairing_token"
-default = false
-```
+### HTTP Mode (Alternative)
+
+1. Install MClaw on new machine
+2. Ensure machine has accessible URL (public IP or port forward)
+3. Add entry to `/etc/mclaw/machines.toml`:
+   ```toml
+   [[machines]]
+   name = "machine3"
+   url = "http://10.0.0.100:42618"
+   token = "pairing_token"
+   default = false
+   ```
+4. Reload dispatcher: `sudo systemctl reload mclaw-dispatcher`
 
 ## Security Checklist
 
 - [ ] Firewall configured to only allow necessary ports
 - [ ] HTTPS/TLS enabled for webhook (production)
-- [ ] Pairing tokens are strong and unique per machine
+- [ ] WSS (secure WebSocket) enabled for production
 - [ ] `allowed_users` restricted to trusted usernames
 - [ ] Logs monitored for suspicious activity
 - [ ] Regular backups of `/etc/mclaw/` configs
 
 ### Firewall Example
 
+#### WebSocket Mode (Recommended)
+
 ```bash
-# On gateway (Machine 1)
+# On gateway (Machine 1) - dispatcher
 sudo ufw allow 22/tcp      # SSH
 sudo ufw allow 443/tcp     # HTTPS for webhook
-sudo ufw allow 42619/tcp   # Dispatcher API (restrict if needed)
+sudo ufw allow 42619/tcp   # Dispatcher WebSocket port
 sudo ufw enable
 
-# On clients
+# On clients - NO inbound ports needed!
+# Clients connect OUT to dispatcher via WebSocket
+sudo ufw allow 22/tcp      # SSH only
+sudo ufw enable
+```
+
+#### HTTP Mode
+
+```bash
+# On clients - need inbound gateway port
 sudo ufw allow 22/tcp      # SSH
 sudo ufw allow 42618/tcp   # MClaw gateway (from dispatcher IP only)
 sudo ufw enable
@@ -383,7 +439,28 @@ sudo ufw enable
 
 ## Troubleshooting
 
-### Machine not responding
+### WebSocket client not connecting
+
+```bash
+# On client: check dispatcher mode logs
+journalctl -u mclaw-daemon -f
+
+# On dispatcher: check WebSocket port is listening
+sudo ss -tlnp | grep 42619
+
+# Check dispatcher logs for connection attempts
+sudo journalctl -u mclaw-dispatcher -f | grep "WebSocket"
+
+# Test WebSocket connection manually
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: test123" \
+  "http://203.0.113.10:42619/ws/connect?machine_name=test&token=test"
+```
+
+### Machine not responding (HTTP mode)
 
 ```bash
 # On dispatcher: test connectivity to client
@@ -407,21 +484,21 @@ curl http://localhost:42619/health
 sudo journalctl -u mclaw-dispatcher -f
 ```
 
-### Pairing token mismatch
+### Authentication token mismatch
 
 ```bash
-# Regenerate token on client
-mclaw --pair-generate
+# Verify token in client config matches machines.toml
+grep auth_token ~/.mclaw/config.toml
+grep token /etc/mclaw/machines.toml
 
-# Update token in /etc/mclaw/machines.toml on gateway
-
-# Reload dispatcher
-sudo systemctl reload mclaw-dispatcher
+# Check dispatcher logs for auth errors
+sudo journalctl -u mclaw-dispatcher -f | grep "authentication"
 ```
 
 ## Next Steps
 
 - [ ] Set up TLS/HTTPS for webhook
+- [ ] Use WSS (secure WebSocket) for production
 - [ ] Configure log rotation
 - [ ] Set up monitoring alerts
 - [ ] Document your machine inventory
@@ -429,6 +506,6 @@ sudo systemctl reload mclaw-dispatcher
 
 ## Related Docs
 
-- [dispatcher-guide.md](dispatcher-guide.md) - Complete reference
+- [dispatcher-guide.md](dispatcher-guide.md) - Complete reference with WebSocket details
 - [operations-runbook.md](ops/operations-runbook.md) - Day-2 operations
 - [network-deployment.md](ops/network-deployment.md) - Network setup
