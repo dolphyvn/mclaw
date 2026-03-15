@@ -60,7 +60,7 @@ MClaw is a Rust-first autonomous agent runtime that adds **multi-machine managem
 │  │OpenRouter│         │ ChatGPT  │         │   GLM    │                 │
 │  └──────────┘         └──────────┘         └──────────┘                 │
 │                                                                          │
-│  Access via: https://ml.ovh139.aliases.me (Nginx HTTPS Reverse Proxy)    │
+│  Access via: https://your-domain.example.com (Nginx HTTPS Reverse Proxy)    │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -353,7 +353,7 @@ allow_public_bind = false
 
 1. Build and install MClaw on the remote server:
 ```bash
-# On remote server (51.255.93.22 example)
+# On remote server (your-client-server.example.com)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source ~/.cargo/env
 
@@ -369,7 +369,7 @@ sudo chmod +x /usr/local/bin/mclaw
 [dispatcher]
 enabled = true
 machine_name = "client2"
-endpoint = "http://ns3366383.ip-37-187-77.eu:42619"
+endpoint = "http://your-gateway-server.example.com:42619"
 auth_token = "YOUR_BOT_TOKEN"
 description = "Remote production server"
 default = false
@@ -386,9 +386,9 @@ allow_public_bind = true
 #!/bin/bash
 while true; do
   sleep 30
-  curl -s -X POST http://ns3366383.ip-37-187-77.eu:42619/heartbeat \
+  curl -s -X POST http://your-gateway-server.example.com:42619/heartbeat \
     -H 'Content-Type: application/json' \
-    -d '{"machine_name": "client2", "url": "http://51.255.93.22:42618"}'
+    -d '{"machine_name": "client2", "url": "http://your-client-server.example.com:42618"}'
 done
 ```
 
@@ -398,11 +398,11 @@ sudo chmod +x /usr/local/bin/mclaw-heartbeat.sh
 
 4. Register with dispatcher:
 ```bash
-curl -X POST http://ns3366383.ip-37-187-77.eu:42619/register \
+curl -X POST http://your-gateway-server.example.com:42619/register \
   -H "Content-Type: application/json" \
   -d '{
     "machine_name": "client2",
-    "url": "http://51.255.93.22:42618",
+    "url": "http://your-client-server.example.com:42618",
     "auth_token": "YOUR_BOT_TOKEN",
     "description": "Remote production server",
     "default": false
@@ -418,7 +418,7 @@ curl -X POST http://ns3366383.ip-37-187-77.eu:42619/register \
 Since client1 runs on the same machine as the Multi-Tenant Gateway, you can configure it directly:
 
 ```bash
-# On the gateway server (ns3366383.ip-37-187-77.eu)
+# On the gateway server (your-gateway-server.example.com)
 # Set mclaw as the default provider
 sed -i 's/^default_provider = "openrouter"/default_provider = "mclaw"/' /root/.mclaw/config.toml
 
@@ -485,7 +485,7 @@ default_provider = "mclaw"
 [dispatcher]
 enabled = true
 machine_name = "client2"
-endpoint = "http://ns3366383.ip-37-187-77.eu:42619"
+endpoint = "http://your-gateway-server.example.com:42619"
 auth_token = "YOUR_BOT_TOKEN"
 description = "Remote production server"
 default = false
@@ -511,7 +511,7 @@ After=network.target
 Type=simple
 User=root
 Environment="RUST_LOG=info"
-Environment="MCLAW_GATEWAY_URL=http://ns3366383.ip-37-187-77.eu:42620"
+Environment="MCLAW_GATEWAY_URL=http://your-gateway-server.example.com:42620"
 Environment="MCLAW_CLIENT_ID=client2"
 Environment="MCLAW_CLIENT_SECRET=mc_client2_..."  # Your generated secret
 ExecStart=/usr/local/bin/mclaw gateway start
@@ -531,7 +531,7 @@ default_provider = "mclaw"
 Instead of environment variables, you can use a config file at `~/.mclaw/mclaw_provider.toml`:
 
 ```toml
-gateway_url = "http://ns3366383.ip-37-187-77.eu:42620"
+gateway_url = "http://your-gateway-server.example.com:42620"
 client_id = "client2"
 client_secret = "mc_client2_..."  # Your generated secret
 ```
@@ -579,7 +579,7 @@ systemctl restart mclaw-gateway
 │     │                                                       │
 │     │  HTTP POST with client_id + client_secret            │
 │     ▼                                                       │
-│  Multi-Tenant Gateway (ns3366383:42620)                     │
+│  Multi-Tenant Gateway (gateway-server:42620)                     │
 │     │                                                       │
 │     │  Validates credentials, routes to provider            │
 │     ▼                                                       │
@@ -743,7 +743,7 @@ sudo apt update
 sudo apt install nginx certbot python3-certbot-nginx
 
 # Get SSL certificate (replace with your domain)
-sudo certbot --nginx -d ml.ovh139.aliases.me
+sudo certbot --nginx -d your-domain.example.com
 ```
 
 ### Step 2: Configure Nginx
@@ -761,7 +761,7 @@ upstream multi_tenant_backend {
 }
 
 server {
-    server_name ml.ovh139.aliases.me;
+    server_name your-domain.example.com;
 
     # === Dispatcher Routes ===
 
@@ -848,20 +848,20 @@ server {
 
     listen [::]:443 ssl;
     listen 443 ssl;
-    ssl_certificate /etc/letsencrypt/live/ml.ovh139.aliases.me/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/ml.ovh139.aliases.me/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/your-domain.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.example.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 }
 
 # HTTP to HTTPS redirect
 server {
-    if ($host = ml.ovh139.aliases.me) {
+    if ($host = your-domain.example.com) {
         return 301 https://$host$request_uri;
     }
     listen 80;
     listen [::]:80;
-    server_name ml.ovh139.aliases.me;
+    server_name your-domain.example.com;
     return 404;
 }
 ```
@@ -882,13 +882,13 @@ sudo systemctl reload nginx
 ### Step 4: Set Telegram Webhook
 
 ```bash
-curl "https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook?url=https://ml.ovh139.aliases.me/webhook"
+curl "https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook?url=https://your-domain.example.com/webhook"
 ```
 
 Update `/etc/mclaw/dispatcher.toml`:
 ```toml
 [telegram]
-webhook_url = "https://ml.ovh139.aliases.me/webhook"
+webhook_url = "https://your-domain.example.com/webhook"
 ```
 
 Restart dispatcher:
@@ -916,13 +916,13 @@ uptime                          # Run on default machine
 
 ```bash
 # Check health
-curl https://ml.ovh139.aliases.me/mt-health
+curl https://your-domain.example.com/mt-health
 
 # List configured clients
-curl https://ml.ovh139.aliases.me/api/v1/clients | jq .
+curl https://your-domain.example.com/api/v1/clients | jq .
 
 # Send chat request
-curl -X POST https://ml.ovh139.aliases.me/api/v1/chat \
+curl -X POST https://your-domain.example.com/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{
     "client_id": "client1",
@@ -934,13 +934,13 @@ curl -X POST https://ml.ovh139.aliases.me/api/v1/chat \
 
 ```bash
 # Check health
-curl https://ml.ovh139.aliases.me/dispatcher-health
+curl https://your-domain.example.com/dispatcher-health
 
 # List machines with status
-curl https://ml.ovh139.aliases.me/admin/machines | jq .
+curl https://your-domain.example.com/admin/machines | jq .
 
 # Register a new machine
-curl -X POST https://ml.ovh139.aliases.me/register \
+curl -X POST https://your-domain.example.com/register \
   -H "Content-Type: application/json" \
   -d '{
     "machine_name": "new-client",

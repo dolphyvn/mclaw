@@ -8,33 +8,33 @@ The MClaw Dispatcher service has been successfully deployed and configured.
 
 | Component | Host | Port | Notes |
 |-----------|------|------|-------|
-| Dispatcher Service | ns3366383.ip-37-187-77.eu | 42619 | Running as systemd service |
-| Multi-Tenant Gateway | ns3366383.ip-37-187-77.eu | 42620 | Centralized LLM API management |
-| Nginx Reverse Proxy | ns3366383.ip-37-187-77.eu | 443 (HTTPS) | SSL: ml.ovh139.aliases.me |
-| Telegram Webhook | - | - | https://ml.ovh139.aliases.me/webhook |
+| Dispatcher Service | your-gateway-server.example.com | 42619 | Running as systemd service |
+| Multi-Tenant Gateway | your-gateway-server.example.com | 42620 | Centralized LLM API management |
+| Nginx Reverse Proxy | your-gateway-server.example.com | 443 (HTTPS) | SSL: your-domain.example.com |
+| Telegram Webhook | - | - | https://your-domain.example.com/webhook |
 
 ### Endpoints
 
 | Endpoint | URL | Purpose |
 |----------|-----|---------|
-| Health | `https://ml.ovh139.aliases.me/dispatcher-health` | Service health check |
-| Machines List | `https://ml.ovh139.aliases.me/machines` | List all configured machines |
-| Admin Machines | `https://ml.ovh139.aliases.me/admin/machines` | List machines with health status |
-| Dispatch API | `https://ml.ovh139.aliases.me/dispatch` | Direct API access (for testing) |
-| Telegram Webhook | `https://ml.ovh139.aliases.me/webhook` | Telegram bot integration |
-| Register Machine | `https://ml.ovh139.aliases.me/register` | Dynamic machine registration (POST) |
-| Unregister Machine | `https://ml.ovh139.aliases.me/unregister` | Unregister a machine (POST) |
-| Heartbeat | `https://ml.ovh139.aliases.me/heartbeat` | Send machine heartbeat (POST) |
-| MT Health | `https://ml.ovh139.aliases.me/mt-health` | Multi-tenant gateway health |
-| MT Clients | `https://ml.ovh139.aliases.me/api/v1/clients` | List multi-tenant clients |
-| MT Chat API | `https://ml.ovh139.aliases.me/api/v1/chat` | Multi-tenant chat completions |
+| Health | `https://your-domain.example.com/dispatcher-health` | Service health check |
+| Machines List | `https://your-domain.example.com/machines` | List all configured machines |
+| Admin Machines | `https://your-domain.example.com/admin/machines` | List machines with health status |
+| Dispatch API | `https://your-domain.example.com/dispatch` | Direct API access (for testing) |
+| Telegram Webhook | `https://your-domain.example.com/webhook` | Telegram bot integration |
+| Register Machine | `https://your-domain.example.com/register` | Dynamic machine registration (POST) |
+| Unregister Machine | `https://your-domain.example.com/unregister` | Unregister a machine (POST) |
+| Heartbeat | `https://your-domain.example.com/heartbeat` | Send machine heartbeat (POST) |
+| MT Health | `https://your-domain.example.com/mt-health` | Multi-tenant gateway health |
+| MT Clients | `https://your-domain.example.com/api/v1/clients` | List multi-tenant clients |
+| MT Chat API | `https://your-domain.example.com/api/v1/chat` | Multi-tenant chat completions |
 
 ### Configured Machines
 
 | Name | URL | Default | Description |
 |------|-----|---------|-------------|
 | client1 | http://localhost:42618 | Yes | Local machine (gateway) |
-| client2 | http://51.255.93.22:42618 | No | Remote production server |
+| client2 | http://your-client-server.example.com:42618 | No | Remote production server |
 
 ### Command Syntax
 
@@ -55,9 +55,9 @@ uptime                 # Run on default machine (client1)
 
 ### Telegram Bot
 
-- **Bot Token**: `8341625895:AAGV6hZi0NWWwSuNg2pL1q5Z9ClyK1f3feE`
-- **Allowed Users**: `@POs3id0nn`
-- **Webhook**: `https://ml.ovh139.aliases.me/webhook` (Active)
+- **Bot Token**: `YOUR_BOT_TOKEN` (from @BotFather)
+- **Allowed Users**: `@YOUR_TELEGRAM_USERNAME` (your Telegram username)
+- **Webhook**: `https://your-domain.example.com/webhook` (Active)
 
 ### Telegram Usage
 
@@ -75,16 +75,16 @@ Send a message to your bot with any of these commands:
 
 ```bash
 # Check dispatcher status
-ssh root@ns3366383.ip-37-187-77.eu systemctl status mclaw-dispatcher
+ssh root@your-gateway-server systemctl status mclaw-dispatcher
 
 # View logs
-ssh root@ns3366383.ip-37-187-77.eu journalctl -u mclaw-dispatcher -f
+ssh root@your-gateway-server journalctl -u mclaw-dispatcher -f
 
 # Restart dispatcher
-ssh root@ns3366383.ip-37-187-77.eu systemctl restart mclaw-dispatcher
+ssh root@your-gateway-server systemctl restart mclaw-dispatcher
 
 # Reload nginx
-ssh root@ns3366383.ip-37-187-77.eu systemctl reload nginx
+ssh root@your-gateway-server systemctl reload nginx
 ```
 
 ### Dynamic Machine Registration
@@ -95,7 +95,7 @@ The dispatcher supports dynamic machine registration, allowing new machines to r
 
 **Register a new machine:**
 ```bash
-curl -X POST https://ml.ovh139.aliases.me/register \
+curl -X POST https://your-domain.example.com/register \
   -H "Content-Type: application/json" \
   -d '{
     "machine_name": "new-client",
@@ -108,7 +108,7 @@ curl -X POST https://ml.ovh139.aliases.me/register \
 
 **Send heartbeat (to keep registration active):**
 ```bash
-curl -X POST https://ml.ovh139.aliases.me/heartbeat \
+curl -X POST https://your-domain.example.com/heartbeat \
   -H "Content-Type: application/json" \
   -d '{
     "machine_name": "new-client",
@@ -118,7 +118,7 @@ curl -X POST https://ml.ovh139.aliases.me/heartbeat \
 
 **Unregister a machine:**
 ```bash
-curl -X POST https://ml.ovh139.aliases.me/unregister \
+curl -X POST https://your-domain.example.com/unregister \
   -H "Content-Type: application/json" \
   -d '{
     "machine_name": "new-client",
@@ -139,7 +139,7 @@ MClaw clients can be configured to auto-register with the dispatcher by adding t
 ```toml
 [dispatcher]
 enabled = true
-endpoint = "http://ns3366383.ip-37-187-77.eu:42619"
+endpoint = "http://your-gateway-server.example.com:42619"
 machine_name = "client3"
 auth_token = "YOUR_BOT_TOKEN"
 description = "Auto-registered client"
@@ -162,12 +162,12 @@ The Multi-Tenant Gateway provides centralized LLM API management for multiple cl
 
 **List all configured clients:**
 ```bash
-curl https://ml.ovh139.aliases.me/api/v1/clients | jq .
+curl https://your-domain.example.com/api/v1/clients | jq .
 ```
 
 **Send chat completion request:**
 ```bash
-curl -X POST https://ml.ovh139.aliases.me/api/v1/chat \
+curl -X POST https://your-domain.example.com/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{
     "client_id": "client1",
@@ -177,7 +177,7 @@ curl -X POST https://ml.ovh139.aliases.me/api/v1/chat \
 
 **Health check:**
 ```bash
-curl https://ml.ovh139.aliases.me/mt-health | jq .
+curl https://your-domain.example.com/mt-health | jq .
 ```
 
 #### Configuration
@@ -218,7 +218,7 @@ To fully utilize the dispatcher:
    mclaw gateway start
    ```
 
-2. **Install and start MClaw on client2** (51.255.93.22):
+2. **Install and start MClaw on client2** (your-client-server.example.com):
    ```bash
    # Copy config and install mclaw
    # Start gateway server
@@ -232,7 +232,7 @@ To fully utilize the dispatcher:
 
 ### Security Notes
 
-- Only `@POs3id0nn` is authorized to use the bot
+- Only `@YOUR_TELEGRAM_USERNAME` is authorized to use the bot
 - All machines are accessed via localhost on gateway (client1)
 - Client2 requires SSH tunnel or direct network access
 - Consider setting up pairing tokens for production use

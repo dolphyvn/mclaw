@@ -39,7 +39,7 @@ Edit `/root/.mclaw/config.toml`:
 [dispatcher]
 enabled = true
 machine_name = "client2"  # Unique name for this machine
-endpoint = "http://ns3366383.ip-37-187-77.eu:42619"
+endpoint = "http://your-gateway-server.example.com:42619"
 auth_token = "YOUR_BOT_TOKEN"  # Use same token as dispatcher
 description = "Remote production server"
 default = false
@@ -90,7 +90,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/bin/bash -c 'while true; do sleep 30; curl -s -X POST http://ns3366383.ip-37-187-77.eu:42619/heartbeat -H "Content-Type: application/json" -d "{\"machine_name\": \"client2\", \"url\": \"http://51.255.93.22:42618\"}"; done'
+ExecStart=/bin/bash -c 'while true; do sleep 30; curl -s -X POST http://your-gateway-server.example.com:42619/heartbeat -H "Content-Type: application/json" -d "{\"machine_name\": \"client2\", \"url\": \"http://your-client-server.example.com:42618\"}"; done'
 Restart=on-failure
 
 [Install]
@@ -110,11 +110,11 @@ systemctl start mclaw-heartbeat
 ### Step 6: Register with Dispatcher
 
 ```bash
-curl -X POST https://ml.ovh139.aliases.me/register \
+curl -X POST https://your-domain.example.com/register \
   -H "Content-Type: application/json" \
   -d '{
     "machine_name": "client2",
-    "url": "http://51.255.93.22:42618",
+    "url": "http://your-client-server.example.com:42618",
     "auth_token": "YOUR_BOT_TOKEN",
     "description": "Remote production server",
     "default": false
@@ -125,7 +125,7 @@ curl -X POST https://ml.ovh139.aliases.me/register \
 
 ```bash
 # Check dispatcher machine list
-curl https://ml.ovh139.aliases.me/admin/machines | jq .
+curl https://your-domain.example.com/admin/machines | jq .
 ```
 
 ## Using the Dispatcher
@@ -156,17 +156,17 @@ ss -tlnp | grep 42618
 journalctl -u mclaw-heartbeat -n 50
 
 # Manually send heartbeat
-curl -X POST http://ns3366383.ip-37-187-77.eu:42619/heartbeat \
+curl -X POST http://your-gateway-server.example.com:42619/heartbeat \
   -H "Content-Type: application/json" \
-  -d '{"machine_name": "client2", "url": "http://51.255.93.22:42618"}'
+  -d '{"machine_name": "client2", "url": "http://your-client-server.example.com:42618"}'
 ```
 
 ### Commands not routing
 
 ```bash
 # Verify machine is in dispatcher registry
-curl https://ml.ovh139.aliases.me/admin/machines | jq '.machines[] | select(.name == "client2")'
+curl https://your-domain.example.com/admin/machines | jq '.machines[] | select(.name == "client2")'
 
 # Check dispatcher logs
-ssh root@ns3366383.ip-37-187-77.eu journalctl -u mclaw-dispatcher -f | grep client2
+ssh root@your-gateway-server journalctl -u mclaw-dispatcher -f | grep client2
 ```
