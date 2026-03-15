@@ -45,6 +45,62 @@ fn parse_temperature(s: &str) -> std::result::Result<f64, String> {
     config::schema::validate_temperature(t)
 }
 
+/// Build the full WebSocket URL for dispatcher connection.
+/// Adds /ws/connect path and query parameters for machine_name and token.
+fn build_dispatcher_ws_url(
+    endpoint: &str,
+    machine_name: &str,
+    auth_token: &Option<String>,
+) -> String {
+    // Ensure endpoint starts with ws:// or wss://
+    let base_url = if endpoint.starts_with("https://") {
+        endpoint.replace("https://", "wss://")
+    } else if endpoint.starts_with("http://") {
+        endpoint.replace("http://", "ws://")
+    } else if !endpoint.starts_with("ws://") && !endpoint.starts_with("wss://") {
+        // If no scheme, default to ws://
+        format!("ws://{}", endpoint)
+    } else {
+        endpoint.to_string()
+    };
+
+    // Trim trailing slash
+    let base_url = base_url.trim_end_matches('/');
+
+    // Append /ws/connect if not already present
+    let url = if base_url.contains("/ws/connect") {
+        base_url.to_string()
+    } else {
+        format!("{}/ws/connect", base_url)
+    };
+
+    // Add query parameters
+    let mut result = url;
+    if !result.contains('?') {
+        result.push('?');
+    } else {
+        result.push('&');
+    }
+    result.push_str(&format!("machine_name={}", url_encode(machine_name)));
+
+    if let Some(token) = auth_token {
+        result.push('&');
+        result.push_str(&format!("token={}", url_encode(token)));
+    }
+
+    result
+}
+
+/// URL encode a string (simple percent encoding).
+fn url_encode(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            _ => format!("%{:02X}", c as u8),
+        })
+        .collect()
+}
+
 mod agent;
 mod approval;
 mod auth;
@@ -1320,8 +1376,7 @@ async fn main() -> Result<()> {
 
             // Load config to get defaults
             let endpoint = endpoint.or_else(|| config.dispatcher.endpoint.clone())
-                .unwrap_or_else(|| "ws://localhost:42619/ws/connect".to_string());
-            let endpoint_display = endpoint.clone();
+                .unwrap_or_else(|| "ws://localhost:42619".to_string());
             let machine_name = machine_name.or_else(|| config.dispatcher.machine_name.clone())
                 .unwrap_or_else(|| hostname::get()
                     .ok()
@@ -1329,8 +1384,12 @@ async fn main() -> Result<()> {
                     .unwrap_or_else(|| "mclaw-client".to_string()));
             let auth_token = token.or_else(|| config.dispatcher.auth_token.clone());
 
+            // Build full WebSocket URL with /ws/connect path and query parameters
+            let ws_url = build_dispatcher_ws_url(&endpoint, &machine_name, &auth_token);
+            let endpoint_display = endpoint.clone();
+
             let connector_config = ConnectorConfig {
-                ws_url: endpoint,
+                ws_url,
                 machine_name: machine_name.clone(),
                 auth_token: auth_token.clone(),
                 reconnect_interval_secs: reconnect_interval,
