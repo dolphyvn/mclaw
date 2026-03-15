@@ -2,14 +2,14 @@
 
 The dispatcher is a centralized routing service that enables one Telegram bot to manage multiple MClaw client instances across different machines.
 
-**Last verified:** March 14, 2026.
+**Last verified:** March 15, 2026.
 
 ## What is the Dispatcher?
 
 The dispatcher acts as a command router between your Telegram bot and multiple MClaw instances running on different machines. Instead of running a separate bot for each machine, you:
 
 1. Run one dispatcher service with your Telegram bot
-2. Connect multiple MClaw clients to the dispatcher
+2. Connect multiple MClaw clients to the dispatcher (via WebSocket or HTTP)
 3. Route commands to specific machines using the `@machine` syntax
 
 ## When to Use It
@@ -21,8 +21,11 @@ The dispatcher acts as a command router between your Telegram bot and multiple M
 | Managing a fleet of servers | Yes |
 | Running commands on multiple machines simultaneously | Yes (`@all`) |
 | Need centralized logging and monitoring | Yes |
+| Machines behind NAT/firewall (no public IP) | Yes (WebSocket mode) |
 
 ## Architecture Overview
+
+### HTTP Mode (Traditional)
 
 ```
 ┌─────────────────┐     ┌──────────────────────────────────────┐
@@ -36,12 +39,38 @@ The dispatcher acts as a command router between your Telegram bot and multiple M
                     ▼                     ▼                     ▼
            ┌────────────────┐    ┌────────────────┐    ┌────────────────┐
            │  Client 1      │    │  Client 2      │    │  Client N      │
-           │  (local)       │    │  51.255.93.22  │    │  ...           │
-           │  Port: 42618   │    │  Port: 42618   │    │  Port: 42618   │
-           │  machine_name: │    │  machine_name: │    │  machine_name: │
-           │  "home-server" │    │  "vps-prod"    │    │  "backup-node" │
+           │  Port: 42618   │    │  Port: 42618   │    │  Port: 418... │
+           │  Has public IP │    │  Has public IP │    │  Has public IP │
            └────────────────┘    └────────────────┘    └────────────────┘
 ```
+
+### WebSocket Mode (NAT-Friendly)
+
+```
+┌─────────────────┐     ┌──────────────────────────────────────┐
+│  Telegram Bot   │────▶│  Dispatcher Service (WebSocket)      │
+│  (one bot)      │     │  Host: your-gateway.com              │
+└─────────────────┘     │  Port: 42619                         │
+                        └──────────────────────────────────────┘
+                                          │
+                    WebSocket connections (outbound from clients)
+                    ┌─────────────────────┼─────────────────────┐
+                    │                     │                     │
+                    ▼                     ▼                     ▼
+           ┌────────────────┐    ┌────────────────┐    ┌────────────────┐
+           │  Client 1      │    │  Client 2      │    │  Client N      │
+           │  Behind NAT   │    │  Behind NAT   │    │  Behind NAT   │
+           │  Connects TO  │    │  Connects TO  │    │  Connects TO  │
+           │  Dispatcher  │    │  Dispatcher  │    │  Dispatcher  │
+           │  via WS       │    │  via WS       │    │  via WS       │
+           └────────────────┘    └────────────────┘    └────────────────┘
+```
+
+**WebSocket Mode Advantages:**
+- ✅ Works for machines behind NAT/firewall (no public IP needed)
+- ✅ Persistent connection = faster command delivery
+- ✅ Automatic reconnection on disconnect
+- ✅ No need to open ports on client machines
 
 ## Command Syntax Reference
 
@@ -100,8 +129,28 @@ rate_limit_per_machine = 120
 
 ### Machines Registry (`/etc/mclaw/machines.toml`)
 
+**WebSocket Mode (NAT-friendly):**
 ```toml
-# Define your MClaw client machines here
+# machines.toml - Optional for WebSocket mode!
+# Machines that connect via WebSocket auto-register when they connect.
+# Only pre-configure machines that use HTTP mode or need special settings.
+
+[[machines]]
+name = "local-server"
+url = "http://localhost:42618"
+default = true
+description = "Local machine using HTTP mode"
+
+[[machines]]
+name = "vntunnel"
+# url = "http://unused:42618"  # Not needed for WebSocket clients
+token = "abc123"
+description = "Pre-configured remote machine"
+```
+
+**HTTP Mode (Traditional):**
+```toml
+# Each machine must have a reachable URL
 [[machines]]
 name = "home-server"
 url = "http://192.168.1.100:42618"
@@ -113,25 +162,39 @@ name = "vps-prod"
 url = "http://51.255.93.22:42618"
 token = "pairing_token_from_client"
 default = false
-
-[[machines]]
-name = "backup-node"
-url = "http://10.0.0.50:42618"
-token = "pairing_token_from_client"
-default = false
 ```
 
-### Client Config Changes
+### Client Config - WebSocket Mode (Recommended for NAT)
 
-Each MClaw client needs to be configured to connect to the dispatcher:
+**On each client machine:**
 
 ```toml
-# Disable direct Telegram (handled by dispatcher)
+# /root/.mclaw/config.toml
+
+[dispatcher]
+enabled = true
+mode = "ws"  # WebSocket mode
+machine_name = "my-machine"  # Unique name for this machine
+endpoint = "ws://dispatcher.example.com:42619"  # Dispatcher WebSocket URL
+auth_token = "abc123"  # Token matching machines.toml (if pre-configured)
+reconnect_interval_secs = 5
+```
+
+**Or use CLI command:**
+```bash
+mclaw connect-dispatcher \
+  --endpoint ws://dispatcher.example.com:42619 \
+  --machine-name my-machine \
+  --token abc123
+```
+
+### Client Config - HTTP Mode (Traditional)
+
+```toml
 [channels_config.telegram]
 bot_token = ""
 enabled = false
 
-# Enable dispatcher mode
 [dispatcher]
 enabled = true
 machine_name = "home-server"  # Must match name in machines.toml
@@ -219,6 +282,47 @@ mclaw --pair-generate
 # Then restart the dispatcher
 ```
 
+## Connection Modes
+
+### WebSocket Mode (Recommended)
+
+**Pros:**
+- ✅ Works through NAT/firewalls (no public IP needed)
+- ✅ Persistent connection = instant command delivery
+- ✅ Automatic reconnection
+- ✅ No inbound ports needed on clients
+
+**Cons:**
+- ❌ Requires stable network connection
+- ❌ Client must maintain connection
+
+**Setup:**
+```toml
+# Client config
+[dispatcher]
+mode = "ws"  # Enable WebSocket mode
+endpoint = "ws://dispatcher:42619"
+```
+
+### HTTP Mode (Traditional)
+
+**Pros:**
+- ✅ Simple HTTP requests
+- ✅ No persistent connection overhead
+
+**Cons:**
+- ❌ Requires public IP on each client
+- ❌ Must open inbound ports on clients
+- ❌ Slower (new HTTP connection per command)
+
+**Setup:**
+```toml
+# Client config
+[dispatcher]
+mode = "register"  # HTTP polling mode
+endpoint = "http://dispatcher:42619"
+```
+
 ## Troubleshooting
 
 ### Dispatcher not starting
@@ -234,21 +338,50 @@ mclaw-dispatcher --config /etc/mclaw/dispatcher.toml --verify
 sudo ss -tlnp | grep 42619
 ```
 
-### Client not connecting to dispatcher
+### Client not connecting to dispatcher (WebSocket Mode)
 
 ```bash
-# On client: verify gateway is running
-mclaw status
+# On client: check gateway logs
+sudo journalctl -u mclaw-gateway -f
 
-# On client: check dispatcher connectivity
-curl http://your-gateway.com:42619/health
+# Check dispatcher is listening on WebSocket port
+sudo ss -tlnp | grep 42619
 
-# On dispatcher: check client in machines.toml
-cat /etc/mclaw/machines.toml
+# Test WebSocket connection manually
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: test123" \
+  "http://dispatcher:42619/ws/connect?machine_name=test&token=test"
 
-# Verify pairing token matches
-# Token must be identical on client and dispatcher
+# Verify machine_name and token in client config
+grep -A5 "\[dispatcher\]" ~/.mclaw/config.toml
+
+# Check dispatcher logs for connection attempts
+sudo journalctl -u mclaw-dispatcher -f | grep "WebSocket"
 ```
+
+### Auto-registration not working
+
+```bash
+# Check dispatcher logs for registration errors
+sudo journalctl -u mclaw-dispatcher -f | grep "Auto-registering"
+
+# Verify bot_token is set (used as admin token for auto-registration)
+grep bot_token /etc/mclaw/dispatcher.toml
+
+# Test manually via HTTP registration endpoint
+curl -X POST http://dispatcher:42619/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "machine_name": "test-machine",
+    "url": "http://unused:42618",
+    "token": "abc123"
+  }'
+```
+
+### Client not connecting to dispatcher (HTTP Mode)
 
 ### Commands not routing to correct machine
 
