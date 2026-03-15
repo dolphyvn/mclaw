@@ -139,10 +139,9 @@ impl Provider for MClawGatewayProvider {
 
 impl MClawGatewayProvider {
     async fn send_request(&self, payload: &ChatRequestPayload<'_>) -> anyhow::Result<ChatResponsePayload> {
-        let auth_token = format!(
-            "mc_{}_{}",
-            self.config.client_id, self.config.client_secret
-        );
+        // The client_secret already contains the full token (mc_{client_id}_{secret})
+        // Use it directly as the Bearer token
+        let auth_token = &self.config.client_secret;
 
         let http_response = self
             .client
