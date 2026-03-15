@@ -88,6 +88,9 @@ fn build_dispatcher_ws_url(
         result.push_str(&format!("token={}", url_encode(token)));
     }
 
+    // Debug: print what we built
+    eprintln!("DEBUG build_dispatcher_ws_url: endpoint={:?} => {:?}", endpoint, result);
+
     result
 }
 
