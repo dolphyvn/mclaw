@@ -511,6 +511,42 @@ Examples:
         host: Option<String>,
     },
 
+    /// Connect to dispatcher as a client (NAT-friendly WebSocket mode)
+    #[command(long_about = "\
+Connect to a dispatcher service via WebSocket.
+
+This is the NAT-friendly client mode where this MClaw instance connects
+TO the dispatcher and waits for commands. Works behind NAT/firewall
+without requiring public IP.
+
+Command syntax on Telegram:
+  @machine_name command  - Route to specific machine
+  @all command           - Run on all machines
+  @list                  - List configured machines
+
+The client will auto-reconnect on disconnection.
+
+Examples:
+  mclaw connect-dispatcher --endpoint ws://dispatcher.example.com:42619/ws/connect
+  mclaw connect-dispatcher --machine-name client2 --token YOUR_TOKEN")]
+    ConnectDispatcher {
+        /// Dispatcher WebSocket endpoint URL
+        #[arg(long)]
+        endpoint: Option<String>,
+
+        /// Machine name for this client
+        #[arg(long)]
+        machine_name: Option<String>,
+
+        /// Auth token for registration
+        #[arg(long)]
+        token: Option<String>,
+
+        /// Reconnection interval in seconds
+        #[arg(long, default_value = "5")]
+        reconnect_interval: u64,
+    },
+
     /// Generate shell completion script to stdout
     #[command(long_about = "\
 Generate shell completion scripts for `mclaw`.
@@ -1271,6 +1307,79 @@ async fn main() -> Result<()> {
             )?;
 
             mclaw::dispatcher::run_dispatcher(dispatcher_config).await
+        },
+
+        Commands::ConnectDispatcher {
+            endpoint,
+            machine_name,
+            token,
+            reconnect_interval,
+        } => {
+            use mclaw::dispatcher::connector::{CommandExecutor, ConnectorConfig, DispatcherConnector};
+            use std::sync::Arc;
+
+            // Load config to get defaults
+            let endpoint = endpoint.or_else(|| config.dispatcher.endpoint.clone())
+                .unwrap_or_else(|| "ws://localhost:42619/ws/connect".to_string());
+            let endpoint_display = endpoint.clone();
+            let machine_name = machine_name.or_else(|| config.dispatcher.machine_name.clone())
+                .unwrap_or_else(|| hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "mclaw-client".to_string()));
+            let auth_token = token.or_else(|| config.dispatcher.auth_token.clone());
+
+            let connector_config = ConnectorConfig {
+                ws_url: endpoint,
+                machine_name: machine_name.clone(),
+                auth_token: auth_token.clone(),
+                reconnect_interval_secs: reconnect_interval,
+            };
+
+            // Create a command executor that runs shell commands
+            struct ShellCommandExecutor;
+            #[async_trait::async_trait]
+            impl CommandExecutor for ShellCommandExecutor {
+                async fn execute(&self, command: &str) -> anyhow::Result<String> {
+                    use tokio::process::Command;
+                    let output = if cfg!(target_os = "windows") {
+                        Command::new("cmd")
+                            .args(["/C", command])
+                            .output()
+                            .await?
+                    } else {
+                        Command::new("sh")
+                            .args(["-c", command])
+                            .output()
+                            .await?
+                    };
+
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+                    if output.status.success() {
+                        Ok(if stdout.is_empty() { stderr } else { stdout })
+                    } else {
+                        let error = if !stderr.is_empty() {
+                            stderr
+                        } else {
+                            format!("Command failed with exit code: {:?}", output.status.code())
+                        };
+                        Err(anyhow::anyhow!(error))
+                    }
+                }
+            }
+
+            let connector = DispatcherConnector::new(
+                connector_config,
+                Arc::new(ShellCommandExecutor),
+            );
+
+            println!("🔗 Connecting to dispatcher as '{}'", machine_name);
+            println!("   Endpoint: {}", endpoint_display);
+            println!();
+
+            connector.run().await
         },
     }
 }

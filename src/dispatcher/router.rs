@@ -4,6 +4,8 @@ use super::client::MClawClient;
 use super::machines::MachineRegistry;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Parsed command with target.
 #[derive(Debug, Clone)]
@@ -96,12 +98,65 @@ impl DispatcherResponse {
 #[derive(Clone)]
 pub struct CommandRouter {
     pub registry: MachineRegistry,
+    pub ws_clients: Option<Arc<super::ws_server::ClientRegistry>>,
+    pub ws_responses: Option<Arc<super::ws_server::ResponseRegistry>>,
 }
 
 impl CommandRouter {
     /// Create a new router.
     pub fn new(registry: MachineRegistry) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            ws_clients: None,
+            ws_responses: None,
+        }
+    }
+
+    /// Set WebSocket registries for reverse connection support.
+    pub fn with_websocket(
+        mut self,
+        clients: Arc<super::ws_server::ClientRegistry>,
+        responses: Arc<super::ws_server::ResponseRegistry>,
+    ) -> Self {
+        self.ws_clients = Some(clients);
+        self.ws_responses = Some(responses);
+        self
+    }
+
+    /// Execute a command via WebSocket if client is connected.
+    async fn execute_via_ws(
+        &self,
+        machine_name: &str,
+        command: &str,
+    ) -> Option<Result<String>> {
+        let (clients, responses) = match (&self.ws_clients, &self.ws_responses) {
+            (Some(c), Some(r)) => (c, r),
+            _ => return None,
+        };
+
+        if !clients.is_connected(machine_name).await {
+            return None;
+        }
+
+        let command_id = Uuid::new_v4().to_string();
+        let mut rx = responses.register_pending(command_id.clone()).await;
+
+        if let Err(e) = clients.send_command(machine_name, command_id.clone(), command.to_string()).await {
+            return Some(Err(e));
+        }
+
+        // Wait for response with timeout
+        match tokio::time::timeout(std::time::Duration::from_secs(60), &mut rx).await {
+            Ok(Ok(resp)) => {
+                if let Some(err) = resp.error {
+                    Some(Err(anyhow::anyhow!(err)))
+                } else {
+                    Some(Ok(resp.response))
+                }
+            }
+            Ok(Err(_)) => Some(Err(anyhow::anyhow!("Response channel closed"))),
+            Err(_) => Some(Err(anyhow::anyhow!("Command timeout"))),
+        }
     }
 
     /// Parse a command message.
@@ -193,8 +248,19 @@ impl CommandRouter {
 
                 let mut responses = Vec::new();
                 for machine in machines {
-                    let client = MClawClient::from_config(&machine);
-                    match client.send_command(&parsed.command).await {
+                    // Try WebSocket first if available
+                    let result = if let Some(ws_result) = self
+                        .execute_via_ws(&machine.name, &parsed.command)
+                        .await
+                    {
+                        ws_result
+                    } else {
+                        // Fall back to HTTP
+                        let client = MClawClient::from_config(&machine);
+                        client.send_command(&parsed.command).await
+                    };
+
+                    match result {
                         Ok(resp) => {
                             responses.push(MachineResponse {
                                 machine: machine.name.clone(),
@@ -218,8 +284,17 @@ impl CommandRouter {
                     .registry
                     .get(name)
                     .ok_or_else(|| anyhow::anyhow!("Machine not found: {}", name))?;
-                let client = MClawClient::from_config(&machine);
-                match client.send_command(&parsed.command).await {
+
+                // Try WebSocket first if available
+                let result = if let Some(ws_result) = self.execute_via_ws(name, &parsed.command).await {
+                    ws_result
+                } else {
+                    // Fall back to HTTP
+                    let client = MClawClient::from_config(&machine);
+                    client.send_command(&parsed.command).await
+                };
+
+                match result {
                     Ok(resp) => Ok(DispatcherResponse::single(name.clone(), resp)),
                     Err(e) => Ok(DispatcherResponse::error(name.clone(), e.to_string())),
                 }
@@ -228,8 +303,19 @@ impl CommandRouter {
                 let machine = self.registry.get_default().ok_or_else(|| {
                     anyhow::anyhow!("No default machine configured")
                 })?;
-                let client = MClawClient::from_config(&machine);
-                match client.send_command(&parsed.command).await {
+
+                // Try WebSocket first if available
+                let result = if let Some(ws_result) =
+                    self.execute_via_ws(&machine.name, &parsed.command).await
+                {
+                    ws_result
+                } else {
+                    // Fall back to HTTP
+                    let client = MClawClient::from_config(&machine);
+                    client.send_command(&parsed.command).await
+                };
+
+                match result {
                     Ok(resp) => Ok(DispatcherResponse::single(machine.name.clone(), resp)),
                     Err(e) => Ok(DispatcherResponse::error(machine.name.clone(), e.to_string())),
                 }

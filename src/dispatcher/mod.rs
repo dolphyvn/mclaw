@@ -6,25 +6,34 @@
 pub mod client;
 pub mod client_register;
 pub mod config;
+pub mod connector;
 pub mod machines;
 pub mod router;
 pub mod telegram;
+pub mod ws_server;
 
 // Re-export commonly used types
 pub use client_register::DispatcherClient;
+pub use connector::{CommandExecutor, ConnectorConfig, DispatcherConnector};
+pub use ws_server::{ClientRegistry, ResponseRegistry};
 
 use self::config::ServiceConfig;
 use self::machines::{MachineRegistry, RegistrationRequest};
 use self::router::CommandRouter;
 use self::telegram::{TelegramHandler, TelegramUpdate};
+use self::ws_server::{authenticate_client, WsClientMessage, WsServerMessage};
 use anyhow::{Context, Result};
 use axum::{
-    extract::State,
+    extract::{
+        ws::{WebSocket, WebSocketUpgrade},
+        Query, State,
+    },
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
     Router,
 };
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,13 +45,20 @@ pub struct DispatcherState {
     pub config: Arc<ServiceConfig>,
     pub router: Arc<CommandRouter>,
     pub telegram: Arc<TelegramHandler>,
+    pub ws_clients: Arc<ClientRegistry>,
+    pub ws_responses: Arc<ResponseRegistry>,
 }
 
 impl DispatcherState {
     /// Create a new state from configuration.
     pub fn new(config: ServiceConfig) -> Result<Self> {
         let registry = MachineRegistry::load(&config.machines.path)?;
-        let router = Arc::new(CommandRouter::new(registry));
+        let ws_clients = Arc::new(ClientRegistry::new());
+        let ws_responses = Arc::new(ResponseRegistry::new());
+
+        let router = Arc::new(
+            CommandRouter::new(registry).with_websocket(ws_clients.clone(), ws_responses.clone()),
+        );
         let telegram = Arc::new(TelegramHandler::new(
             config.telegram.bot_token.clone(),
             config.telegram.bot_username.clone(),
@@ -54,6 +70,8 @@ impl DispatcherState {
             config: Arc::new(config),
             router,
             telegram,
+            ws_clients,
+            ws_responses,
         })
     }
 }
@@ -116,6 +134,7 @@ pub async fn run_dispatcher(config: ServiceConfig) -> Result<()> {
         .route("/unregister", post(unregister_handler))
         .route("/heartbeat", post(heartbeat_handler))
         .route("/admin/machines", get(admin_machines_handler))
+        .route("/ws/connect", get(ws_connect_handler))
         .with_state(state.clone());
 
     // Set webhook if configured
@@ -325,6 +344,127 @@ async fn admin_machines_handler(
         "machines": machines,
         "total": machines.len(),
     }))
+}
+
+/// WebSocket connection query parameters.
+#[derive(Debug, Deserialize)]
+struct WsConnectQuery {
+    machine_name: String,
+    token: Option<String>,
+}
+
+/// WebSocket upgrade handler for client connections.
+async fn ws_connect_handler(
+    State(state): State<DispatcherState>,
+    Query(params): Query<WsConnectQuery>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_ws_client(socket, state, params))
+}
+
+/// Handle a WebSocket client connection.
+async fn handle_ws_client(socket: WebSocket, state: DispatcherState, params: WsConnectQuery) {
+    let machine_name = params.machine_name.clone();
+    let token = params.token.as_deref();
+
+    // Check if machine exists in registry
+    let machines = state.router.registry.list_all();
+    let machine_exists = machines.iter().any(|m| m.name == machine_name);
+
+    let admin_token = if state.config.telegram.bot_token.is_empty() {
+        None
+    } else {
+        Some(state.config.telegram.bot_token.as_str())
+    };
+
+    // If machine doesn't exist, auto-register it for WebSocket clients
+    if !machine_exists {
+        use crate::dispatcher::machines::RegistrationRequest;
+
+        tracing::info!("Auto-registering new WebSocket client: {}", machine_name);
+
+        let registration = RegistrationRequest {
+            machine_name: machine_name.clone(),
+            url: "http://unused:42618".to_string(),  // Not used for WebSocket clients
+            auth_token: token.map(|t| t.to_string()),
+            description: Some("Auto-registered WebSocket client".to_string()),
+            default: false,
+        };
+
+        // Auto-register using bot token as admin token (or none if empty)
+        let _ = state.router.registry.register(registration, admin_token);
+    } else {
+        // Machine exists, verify token if configured
+        if let Err(e) = authenticate_client(&machine_name, token, &machines, admin_token) {
+            tracing::warn!("WebSocket client authentication failed: {} - {}", machine_name, e);
+            return;
+        }
+    }
+
+    tracing::info!("WebSocket client connected: {}", machine_name);
+
+    let (mut sender, mut receiver) = socket.split();
+    let (client_tx, mut client_rx) = tokio::sync::mpsc::channel::<WsServerMessage>(100);
+
+    // Register the client
+    state.ws_clients.register(&machine_name, client_tx.clone()).await;
+
+    // Spawn task to send messages to client
+    let machine_name_clone = machine_name.clone();
+    let ws_clients_clone = state.ws_clients.clone();
+    let send_task = tokio::spawn(async move {
+        while let Some(msg) = client_rx.recv().await {
+            let json = serde_json::to_string(&msg).unwrap_or_default();
+            if sender
+                .send(axum::extract::ws::Message::Text(json.into()))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+        ws_clients_clone.unregister(&machine_name_clone).await;
+    });
+
+    // Handle incoming messages from client
+    while let Some(msg) = receiver.next().await {
+        match msg {
+            Ok(axum::extract::ws::Message::Text(text)) => {
+                if let Ok(client_msg) = serde_json::from_str::<WsClientMessage>(&text) {
+                    match client_msg {
+                        WsClientMessage::Result {
+                            id,
+                            output,
+                            error,
+                        } => {
+                            use crate::dispatcher::router::MachineResponse;
+                            state.ws_responses.complete(
+                                id,
+                                MachineResponse {
+                                    machine: machine_name.clone(),
+                                    response: output,
+                                    error,
+                                },
+                            ).await;
+                        }
+                        WsClientMessage::Pong => {
+                            // Keepalive response
+                        }
+                        WsClientMessage::Register { .. } => {
+                            // Already authenticated during connection
+                        }
+                    }
+                }
+            }
+            Ok(axum::extract::ws::Message::Close(_)) => break,
+            Err(_) => break,
+            _ => {}
+        }
+    }
+
+    send_task.abort();
+    state.ws_clients.unregister(&machine_name).await;
+    tracing::info!("WebSocket client disconnected: {}", machine_name);
 }
 
 /// Spawn background task to clean up stale machines.

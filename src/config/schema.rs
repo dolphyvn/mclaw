@@ -593,10 +593,15 @@ pub struct ClientDispatcherConfig {
     /// Enable dispatcher mode. When true, the client registers with the dispatcher.
     #[serde(default)]
     pub enabled: bool,
+    /// Connection mode: "ws" for WebSocket (NAT-friendly), "register" for HTTP registration.
+    /// WebSocket mode connects TO dispatcher and keeps connection open.
+    /// Register mode requires dispatcher to connect TO this client (needs public IP).
+    #[serde(default)]
+    pub mode: String,
     /// Machine name for dispatcher routing. If not set, uses hostname or Telegram machine_name.
     #[serde(default)]
     pub machine_name: Option<String>,
-    /// Dispatcher endpoint URL (e.g. `"http://dispatcher:42619"`).
+    /// Dispatcher endpoint URL (e.g. `"http://dispatcher:42619"` or `"ws://dispatcher:42619/ws/connect"`).
     #[serde(default)]
     pub endpoint: Option<String>,
     /// Registration auth token. Must match dispatcher's bot_token for registration.
@@ -608,25 +613,34 @@ pub struct ClientDispatcherConfig {
     /// Whether this machine is the default machine for commands without @ prefix.
     #[serde(default)]
     pub default: bool,
-    /// Registration interval in seconds. How often to re-register with the dispatcher.
+    /// Registration interval in seconds. How often to re-register with the dispatcher (register mode only).
     #[serde(default = "default_client_dispatcher_registration_interval_secs")]
     pub registration_interval_secs: u64,
+    /// Reconnection interval in seconds for WebSocket mode (ws only).
+    #[serde(default = "default_client_dispatcher_reconnect_interval_secs")]
+    pub reconnect_interval_secs: u64,
 }
 
 fn default_client_dispatcher_registration_interval_secs() -> u64 {
     60
 }
 
+fn default_client_dispatcher_reconnect_interval_secs() -> u64 {
+    5
+}
+
 impl Default for ClientDispatcherConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            mode: "register".to_string(),
             machine_name: None,
             endpoint: None,
             auth_token: None,
             description: None,
             default: false,
             registration_interval_secs: default_client_dispatcher_registration_interval_secs(),
+            reconnect_interval_secs: default_client_dispatcher_reconnect_interval_secs(),
         }
     }
 }

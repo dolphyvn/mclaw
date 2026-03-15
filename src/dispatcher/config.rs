@@ -138,7 +138,8 @@ pub struct MachineConfig {
     /// Machine name (used in @machine syntax).
     pub name: String,
 
-    /// MClaw gateway URL.
+    /// MClaw gateway URL (optional in WebSocket mode, required for HTTP fallback).
+    #[serde(default = "default_machine_url")]
     pub url: String,
 
     /// Optional pairing token for authentication.
@@ -152,6 +153,10 @@ pub struct MachineConfig {
     /// Optional description.
     #[serde(default)]
     pub description: Option<String>,
+}
+
+fn default_machine_url() -> String {
+    "http://unused:42618".to_string()
 }
 
 /// Machines registry file.
