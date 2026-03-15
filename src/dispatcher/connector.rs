@@ -63,7 +63,8 @@ impl DispatcherConnector {
 
     /// Run the connector (blocks until shutdown).
     pub async fn run(&self) -> Result<()> {
-        let ws_url = self.build_ws_url()?;
+        // ws_url should already have /ws/connect path and query parameters
+        let ws_url = self.config.ws_url.clone();
         let mut reconnect_interval = interval(Duration::from_secs(self.config.reconnect_interval_secs));
 
         loop {
@@ -84,21 +85,6 @@ impl DispatcherConnector {
 
             reconnect_interval.tick().await;
         }
-    }
-
-    /// Build the WebSocket URL with query parameters.
-    fn build_ws_url(&self) -> Result<String> {
-        let mut url = self.config.ws_url.clone();
-        if !url.contains('?') {
-            url.push('?');
-        } else {
-            url.push('&');
-        }
-        url.push_str(&format!("machine_name={}", self.config.machine_name));
-        if let Some(token) = &self.config.auth_token {
-            url.push_str(&format!("&token={}", urlencoding::encode(token)));
-        }
-        Ok(url)
     }
 
     /// Connect and run the WebSocket loop.
