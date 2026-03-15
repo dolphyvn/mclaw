@@ -45,6 +45,7 @@ impl DispatcherState {
         let router = Arc::new(CommandRouter::new(registry));
         let telegram = Arc::new(TelegramHandler::new(
             config.telegram.bot_token.clone(),
+            config.telegram.bot_username.clone(),
             (*router).clone(),
             config.telegram.allowed_users.clone(),
         ));

@@ -53,6 +53,7 @@ struct TelegramOutgoingMessage {
 /// Telegram webhook handler.
 pub struct TelegramHandler {
     bot_token: String,
+    bot_username: String,
     router: CommandRouter,
     allowed_users: Vec<String>,
 }
@@ -61,14 +62,53 @@ impl TelegramHandler {
     /// Create a new handler.
     pub fn new(
         bot_token: String,
+        bot_username: String,
         router: CommandRouter,
         allowed_users: Vec<String>,
     ) -> Self {
         Self {
             bot_token,
+            bot_username,
             router,
             allowed_users,
         }
+    }
+
+    /// Strip bot mention from message text (for group chats).
+    /// Converts "@botname @client1 command" -> "@client1 command"
+    fn strip_bot_mention(&self, text: &str) -> String {
+        let text = text.trim();
+
+        // If no bot username set, return as-is
+        if self.bot_username.is_empty() {
+            return text.to_string();
+        }
+
+        // Try various formats:
+        // @botname command
+        // @botname@client1 command (no space)
+        let bot_mention = format!("@{}", self.bot_username);
+
+        // Check if text starts with bot mention
+        if text.starts_with(&bot_mention) {
+            let rest = text[bot_mention.len()..].trim();
+            return rest.to_string();
+        }
+
+        // Also handle case where bot name is directly adjacent: @botname@client1
+        if let Some(pos) = text.find(&bot_mention) {
+            if pos == 0 {
+                let rest = &text[bot_mention.len()..];
+                // If next char is @, it's @botname@client1 format
+                if rest.starts_with('@') {
+                    return rest.to_string();
+                }
+                // Otherwise it's @botname command format, trim and return
+                return rest.trim().to_string();
+            }
+        }
+
+        text.to_string()
     }
 
     /// Check if user is allowed.
@@ -129,6 +169,10 @@ impl TelegramHandler {
             None => return Ok(()), // Ignore non-text messages
         };
 
+        // Strip bot mention from group chat messages
+        // Converts "@botname @client1 command" -> "@client1 command"
+        let text = self.strip_bot_mention(text);
+
         let user_display = message
             .from
             .as_ref()
@@ -138,7 +182,7 @@ impl TelegramHandler {
         tracing::info!("Received from {}: {}", user_display, text);
 
         // Parse and execute command
-        let parsed = match self.router.parse(text) {
+        let parsed = match self.router.parse(&text) {
             Ok(p) => p,
             Err(e) => {
                 let msg = format!("Failed to parse command: {}", e);
@@ -280,7 +324,7 @@ mod tests {
     fn test_user_allowed_wildcard() {
         let registry = MachineRegistry::load("/nonexistent").unwrap();
         let router = CommandRouter::new(registry);
-        let handler = TelegramHandler::new("test_token".to_string(), router, vec!["*".to_string()]);
+        let handler = TelegramHandler::new("test_token".to_string(), "testbot".to_string(), router, vec!["*".to_string()]);
 
         let user = TelegramUser {
             id: 123,
@@ -297,6 +341,7 @@ mod tests {
         let router = CommandRouter::new(registry);
         let handler = TelegramHandler::new(
             "test_token".to_string(),
+            "testbot".to_string(),
             router,
             vec!["@allowed".to_string()],
         );
@@ -316,6 +361,7 @@ mod tests {
         let router = CommandRouter::new(registry);
         let handler = TelegramHandler::new(
             "test_token".to_string(),
+            "testbot".to_string(),
             router,
             vec!["@allowed".to_string()],
         );

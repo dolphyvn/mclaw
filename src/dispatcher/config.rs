@@ -59,6 +59,10 @@ pub struct TelegramConfig {
     #[serde(default = "default_empty_string")]
     pub bot_token: String,
 
+    /// Bot username (for stripping mentions in group chats).
+    #[serde(default)]
+    pub bot_username: String,
+
     /// Webhook URL (optional).
     #[serde(default)]
     pub webhook_url: Option<String>,
@@ -72,6 +76,7 @@ impl Default for TelegramConfig {
     fn default() -> Self {
         Self {
             bot_token: String::new(),
+            bot_username: String::new(),
             webhook_url: None,
             allowed_users: Vec::new(),
         }
